@@ -1,5 +1,5 @@
 import os
-from z5py.util import copy_group
+from z5py.util import copy_group, copy_dataset
 
 
 def make_initial_dataset(out_path):
@@ -15,5 +15,15 @@ def make_initial_dataset(out_path):
                os.path.join(out_path, 'volumes/raw'))
 
 
+def check(out_path):
+    path = '/g/kreshuk/data/schwab/parapodia_rachel/data.n5'
+    in_key = 'volumes/paintera/lmc_nuclei_v1_fragments/label-to-block-mapping/s0'
+    out_key = 'volumes/segmentation/labs'
+    copy_dataset(path, out_path, in_key, out_key, 8)
+
+
 if __name__ == '__main__':
-    make_initial_dataset('/g/kreshuk/pape/Work/my_projects/paintera_projects/proofreading_fib_parapod/v1_rachel.n5')
+    path = '/g/kreshuk/pape/Work/my_projects/paintera_projects/proofreading_fib_parapod/v1_rachel.n5'
+    path = './test.n5'
+    make_initial_dataset(path)
+    # check(path)
