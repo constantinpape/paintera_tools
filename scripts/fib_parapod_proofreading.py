@@ -23,7 +23,5 @@ def check(out_path):
 
 
 if __name__ == '__main__':
-    path = '/g/kreshuk/pape/Work/my_projects/paintera_projects/proofreading_fib_parapod/v1_rachel.n5'
-    path = './test.n5'
+    path = '/g/schwab/templin/proofreading/v1_rachel.n5'
     make_initial_dataset(path)
-    # check(path)
