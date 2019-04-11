@@ -1,6 +1,7 @@
 import os
 import json
 import numpy as np
+from concurrent import futures
 
 import z5py
 import luigi
@@ -72,19 +73,28 @@ def split_by_watershed(assignment_path, assignment_key,
         ds = f[assignment_key]
         ds.n_threads = n_threads
         assignments = ds[:]
-    offset = int(assignments.max()) + 1
 
-    # find the segment id of all seed fragments
-    flat_seed_fragments = [seed_frag for seed_frags in seed_fragments
-                           for seed_frag in seed_frags]
-    seed_mask = np.in1d(assignments[0], flat_seed_fragments)
-    segment_ids = np.unique(assignments[1][seed_mask])
-    print(segment_ids)
-    # TODO for now we only support a single segment, but we should enable multiple
-    assert len(segment_ids) == 1
+    # map the seed fragments to segment ids
+    segment_ids_to_seed_groups = {}
+    for group_id, seeds in enumerate(seed_fragments):
+        seed_mask = np.in1d(assignments[0], seeds)
+        segment_id = np.unique(assignments[1][seed_mask])
+        # each seed group should correspond to a single segment
+        assert len(segment_id) == 1, str(segment_id)
+        segment_id = segment_id[0]
+        if segment_id in segment_ids_to_seed_groups:
+            segment_ids_to_seed_groups[segment_id].append(group_id)
+        else:
+            segment_ids_to_seed_groups[segment_id] = [group_id]
+    segment_ids = list(segment_ids_to_seed_groups.keys())
 
     def split_segment(segment_id):
         print("Splitting segment", segment_id)
+        seed_groups = segment_ids_to_seed_groups[segment_id]
+        if len(seed_groups) == 1:
+            print("only have a single seed for segment", segment_id, "doing nothing")
+            return None
+
         # find all fragment ids belonging to this fragment and extract the corresponding sub-graph
         fragment_mask = assignments[1] == segment_id
         fragment_ids = assignments[0][fragment_mask]
@@ -103,20 +113,39 @@ def split_by_watershed(assignment_path, assignment_key,
         sub_graph = nifty.graph.undirectedGraph(n_sub_nodes)
         sub_graph.insertEdges(sub_uvs)
 
-        # get cureent seeds # TODO
-        this_seeds = seed_fragments
+        # get cureent seeds
         sub_seeds = np.zeros(n_sub_nodes, dtype='uint64')
         seed_id = 1
-        for seed_frags in this_seeds:
+        for seed_group_id in seed_groups:
+            seed_frags = seed_fragments[seed_group_id]
             for seed_frag in seed_frags:
                 mapped_id = mapping[seed_frag]
                 sub_seeds[mapped_id] = seed_id
             seed_id += 1
 
         sub_assignment = nifty.graph.edgeWeightedWatershedsSegmentation(sub_graph, sub_seeds, sub_weights)
-        mask = sub_assignment != 0
-        return fragment_ids[mask], sub_assignment[mask]
 
-    sub_ids, sub_assignments = split_segment(segment_ids[0])
-    sub_assignments += offset
-    return segment_ids, sub_ids, sub_assignments
+        zero_mask = sub_assignment != 0
+        fragment_ids = fragment_ids[zero_mask]
+        sub_assignment = sub_assignment[zero_mask]
+        assert len(np.unique(sub_assignment)) == len(seed_groups)
+        return fragment_ids, sub_assignment
+
+    with futures.ThreadPoolExecutor(n_threads) as tp:
+        tasks = [tp.submit(split_segment, seg_id) for seg_id in segment_ids]
+        results = [t.result() for t in tasks]
+    results = [res for res in results if res is not None]
+    ids = np.concatenate([res[0] for res in results], axis=0)
+
+    # make the new assignments
+    new_assignments = []
+    offset = int(assignments.max())
+    # offset by old assignment max id
+    for res in results:
+        ass = res[1]
+        ass += offset
+        new_assignments.append(ass)
+        offset = ass.max()
+    new_assignments = np.concatenate(new_assignments, axis=0)
+    assert len(ids) == len(new_assignments)
+    return ids, new_assignments
