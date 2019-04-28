@@ -4,6 +4,7 @@ import numpy as np
 
 import luigi
 import z5py
+import vigra
 from cluster_tools.write import WriteLocal, WriteSlurm
 
 
@@ -76,7 +77,7 @@ def make_dense_assignments(assignments):
 
 def save_assignments(assignments, save_path, save_key):
     # save the dense assignments in temp folder
-    chunks = (min(n_ids, 1000000), 2)
+    chunks = (min(len(assignments), 1000000), 2)
     f_ass = z5py.File(save_path)
     ds = f_ass.require_dataset(save_key, shape=assignments.shape, chunks=chunks,
                                compression='gzip', dtype='uint64')
@@ -92,15 +93,15 @@ def serialize_assignments(g, ass_key, save_path, save_key,
     # only keep assignments corresponding to locked segments
     # if locked segments are given
     if locked_segments is not None:
-        locked_mask = np.in1d(dense_assignments[1, :], locked_segments)
-        dense_assignments[np.logical_not(locked_mask)] = 0
+        locked_mask = np.in1d(dense_assignments[:, 1], locked_segments)
+        dense_assignments[:, 1][np.logical_not(locked_mask)] = 0
 
     # relabel the assignments consecutively if specified
     if relabel_output:
-        seg_ids = dense_assignments[1, :]
+        seg_ids = dense_assignments[:, 1]
         vigra.analysis.relabelConsecutive(seg_ids, out=seg_ids, start_label=1,
                                           keep_zeros=True)
-        dense_assignments[1, :] = seg_ids
+        dense_assignments[:, 1] = seg_ids
 
     save_assignments(dense_assignments, save_path, save_key)
 
@@ -137,7 +138,7 @@ def serialize_merged_segmentation(path, key, out_path, out_key, ass_path, ass_ke
 
 
 def serialize_from_commit(path, key, out_path, out_key,
-                          tmp_folder, max_jobs, target,
+                          tmp_folder, max_jobs, target, scale=0,
                           locked_segments=None, relabel_output=False):
     f = z5py.File(path, 'r')
     g = f[key]
@@ -155,7 +156,7 @@ def serialize_from_commit(path, key, out_path, out_key,
     serialize_assignments(g, ass_key, save_path, save_key,
                           locked_segments, relabel_output)
 
-    full_seg_key = os.path.join(key, seg_key, 's0')
+    full_seg_key = os.path.join(key, seg_key, 's%i' % scale)
     print("Serializing new segmentation ...")
     serialize_merged_segmentation(path, full_seg_key,
                                   out_path, out_key,
