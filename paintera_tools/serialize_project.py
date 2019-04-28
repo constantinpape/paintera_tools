@@ -60,27 +60,49 @@ def serialize_from_actions():
     pass
 
 
-def serialize_assignments(g, ass_key, save_path, save_key):
-    # load the assignments
-    ass = g[ass_key][:].T
-
+def make_dense_assignments(assignments):
     # get the max overall id
-    n_ids = int(ass.max()) + 1
+    n_ids = int(assignments.max()) + 1
     # cast to dense assignments
     dense_assignments = np.zeros((n_ids + 1, 2), dtype='uint64')
     dense_assignments[:-1, 0] = np.arange(n_ids)
     dense_assignments[:-1, 1] = np.arange(n_ids)
-    dense_assignments[:-1, 1][ass[:, 0]] = ass[:, 1]
+    dense_assignments[:-1, 1][assignments[:, 0]] = assignments[:, 1]
     # add assignment for the paintera ignore label
     dense_assignments[-1, 0] = 18446744073709551615
     dense_assignments[-1, 1] = 0
+    return dense_assignments
 
+
+def save_assignments(assignments, save_path, save_key):
     # save the dense assignments in temp folder
     chunks = (min(n_ids, 1000000), 2)
     f_ass = z5py.File(save_path)
-    ds = f_ass.require_dataset(save_key, shape=dense_assignments.shape, chunks=chunks,
+    ds = f_ass.require_dataset(save_key, shape=assignments.shape, chunks=chunks,
                                compression='gzip', dtype='uint64')
-    ds[:] = dense_assignments
+    ds[:] = assignments
+
+
+def serialize_assignments(g, ass_key, save_path, save_key,
+                          locked_segments=None, relabel_output=False):
+    # load the assignments and make them dense
+    assignments = g[ass_key][:].T
+    dense_assignments = make_dense_assignments(assignments)
+
+    # only keep assignments corresponding to locked segments
+    # if locked segments are given
+    if locked_segments is not None:
+        locked_mask = np.in1d(dense_assignments[1, :], locked_segments)
+        dense_assignments[np.logical_not(locked_mask)] = 0
+
+    # relabel the assignments consecutively if specified
+    if relabel_output:
+        seg_ids = dense_assignments[1, :]
+        vigra.analysis.relabelConsecutive(seg_ids, out=seg_ids, start_label=1,
+                                          keep_zeros=True)
+        dense_assignments[1, :] = seg_ids
+
+    save_assignments(dense_assignments, save_path, save_key)
 
 
 def serialize_merged_segmentation(path, key, out_path, out_key, ass_path, ass_key,
@@ -115,7 +137,8 @@ def serialize_merged_segmentation(path, key, out_path, out_key, ass_path, ass_ke
 
 
 def serialize_from_commit(path, key, out_path, out_key,
-                          tmp_folder, max_jobs, target):
+                          tmp_folder, max_jobs, target,
+                          locked_segments=None, relabel_output=False):
     f = z5py.File(path, 'r')
     g = f[key]
 
@@ -129,7 +152,8 @@ def serialize_from_commit(path, key, out_path, out_key,
     save_path = os.path.join(tmp_folder, 'assignments.n5')
     save_key = 'assignments'
     print("Serializing assignments ...")
-    serialize_assignments(g, ass_key, save_path, save_key)
+    serialize_assignments(g, ass_key, save_path, save_key,
+                          locked_segments, relabel_output)
 
     full_seg_key = os.path.join(key, seg_key, 's0')
     print("Serializing new segmentation ...")
