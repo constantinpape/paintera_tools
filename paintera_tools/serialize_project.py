@@ -4,8 +4,8 @@ import numpy as np
 
 import luigi
 import z5py
-import vigra
 from cluster_tools.write import WriteLocal, WriteSlurm
+from cluster_tools.relabel import RelabelWorkflow
 
 
 # TODO proprly implement this
@@ -85,7 +85,7 @@ def save_assignments(assignments, save_path, save_key):
 
 
 def serialize_assignments(g, ass_key, save_path, save_key,
-                          locked_segments=None, relabel_output=False):
+                          locked_segments=None):
     # load the assignments and make them dense
     assignments = g[ass_key][:].T
     dense_assignments = make_dense_assignments(assignments)
@@ -95,13 +95,6 @@ def serialize_assignments(g, ass_key, save_path, save_key,
     if locked_segments is not None:
         locked_mask = np.in1d(dense_assignments[:, 1], locked_segments)
         dense_assignments[:, 1][np.logical_not(locked_mask)] = 0
-
-    # relabel the assignments consecutively if specified
-    if relabel_output:
-        seg_ids = dense_assignments[:, 1]
-        vigra.analysis.relabelConsecutive(seg_ids, out=seg_ids, start_label=1,
-                                          keep_zeros=True)
-        dense_assignments[:, 1] = seg_ids
 
     save_assignments(dense_assignments, save_path, save_key)
 
@@ -124,7 +117,7 @@ def serialize_merged_segmentation(path, key, out_path, out_key, ass_path, ass_ke
         json.dump(global_config, f)
 
     config = task.default_task_config()
-    config.update({'chunks': block_shape})
+    config.update({'chunks': block_shape, 'allow_empty_assignments': True})
     with open(os.path.join(config_folder, 'write.config'), 'w') as f:
         json.dump(config, f)
 
@@ -134,7 +127,20 @@ def serialize_merged_segmentation(path, key, out_path, out_key, ass_path, ass_ke
              assignment_path=ass_path, assignment_key=ass_key,
              identifier='merge-paintera-seg')
     ret = luigi.build([t], local_scheduler=True)
-    assert ret, "Writing mereged segmentation failed"
+    assert ret, "Writing merged segmentation failed"
+
+
+def relabel(path, key, tmp_folder, target, max_jobs):
+    config_folder = os.path.join(tmp_folder, 'configs')
+    task = RelabelWorkflow
+
+    t = task(tmp_folder=tmp_folder, config_dir=config_folder,
+             target=target, max_jobs=max_jobs,
+             input_path=path, input_key=key,
+             assignment_path=os.path.join(tmp_folder, 'assignments.n5'),
+             assignment_key='relabel_assignments')
+    ret = luigi.build([t], local_scheduler=True)
+    assert ret, "Relabeling merged segmentation failed"
 
 
 def serialize_from_commit(path, key, out_path, out_key,
@@ -154,7 +160,7 @@ def serialize_from_commit(path, key, out_path, out_key,
     save_key = 'assignments'
     print("Serializing assignments ...")
     serialize_assignments(g, ass_key, save_path, save_key,
-                          locked_segments, relabel_output)
+                          locked_segments)
 
     full_seg_key = os.path.join(key, seg_key, 's%i' % scale)
     print("Serializing new segmentation ...")
@@ -162,3 +168,6 @@ def serialize_from_commit(path, key, out_path, out_key,
                                   out_path, out_key,
                                   save_path, save_key,
                                   tmp_folder, max_jobs, target)
+
+    if relabel_output:
+        relabel(out_path, out_key, tmp_folder, target, max_jobs)
