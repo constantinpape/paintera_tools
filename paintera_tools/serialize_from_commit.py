@@ -43,24 +43,22 @@ def find_uniques(path, seg_in_key, out_path, out_key,
 
 def make_dense_assignments(fragment_ids, assignments):
 
-    # make dense assignments
-    # initially, each fragment id is assigned its own id as segment id
-    dense_assignments = np.zeros((len(fragment_ids), 2), dtype='uint64')
-    dense_assignments[:, 0] = fragment_ids
-    dense_assignments[:, 1] = fragment_ids
-
-    # find all fragments that have a segment id assigned
-    with_assignment = np.in1d(fragment_ids, assignments[:, 0])
-    assert np.sum(with_assignment) == len(assignments)
-    dense_assignments[:, 1][with_assignment] = assignments[:, 1]
+    assignment_dict = dict(zip(assignments[:, 0], assignments[:, 1]))
+    dense_assignments = {frag_id: assignment_dict.get(frag_id, frag_id) for frag_id in fragment_ids}
 
     # set the paintera ignore label assignment to 0
     paintera_ignore_label = 18446744073709551615
-    if dense_assignments[-1, 0] == paintera_ignore_label:
-        dense_assignments[-1, 1] = 0
+    if paintera_ignore_label in dense_assignments:
+        dense_assignments[paintera_ignore_label] = 0
+
+    frag_ids = np.array(list(dense_assignments.keys()), dtype='uint64')
+    seg_ids = np.array(list(dense_assignments.values()), dtype='uint64')
+    dense_assignments = np.concatenate([frag_ids[:, None], seg_ids[:, None]], axis=1)
+    assert dense_assignments.shape[1] == 2
     return dense_assignments
 
 
+# TODO wrap this in a luigi.Task
 def serialize_assignments(g, ass_key,
                           save_path, unique_key, save_key,
                           locked_segments=None, relabel_output=False):
@@ -134,7 +132,9 @@ def serialize_from_commit(path, key, out_path, out_key,
     assignment_key = 'assignments'
 
     # 1.) find the unique ids in the base segemntation
-    find_uniques(path, seg_in_key, save_path, unique_key,
+    # NOTE we need to find uniques always at scale 0
+    seg_zero_key = os.path.join(key, seg_key, 's0')
+    find_uniques(path, seg_zero_key, save_path, unique_key,
                  tmp_folder, max_jobs, target)
 
     # 2.) make and serialize new assignments
