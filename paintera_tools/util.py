@@ -3,7 +3,9 @@ import json
 import numpy as np
 import luigi
 import z5py
+
 from cluster_tools.relabel import UniqueWorkflow
+from cluster_tools.workflows import ProblemWorkflow
 
 from . import default_config
 
@@ -56,3 +58,38 @@ def write_global_config(config_folder, block_shape=None):
                           'block_shape': block_shape})
     with open(os.path.join(config_folder, 'global.config'), 'w') as f:
         json.dump(global_config, f)
+
+
+def compute_graph_and_weights(aff_path, aff_key,
+                              seg_path, seg_key, out_path,
+                              tmp_folder, target, max_jobs,
+                              offsets=[[-1, 0, 0], [0, -1, 0], [0, 0, -1]]):
+    config_folder = os.path.join(tmp_folder, 'configs')
+    chunks = z5py.File(seg_path, 'r')[seg_key].chunks
+    write_global_config(config_folder, chunks)
+
+    configs = ProblemWorkflow.get_config()
+    conf = configs['block_edge_features']
+    conf.update({'mem_limit': 4})
+    if offsets is not None:
+        conf.update({'offsets': offsets})
+    with open(os.path.join(config_folder, 'block_edge_features.config'), 'w') as f:
+        json.dump(conf, f)
+
+    conf_names = ['merge_sub_graphs', 'map_edge_ids', 'merge_edge_features']
+    # TODO make this configurable
+    n_threads = 12
+    max_ram = 64
+    for name in conf_names:
+        conf = configs[name]
+        conf.update({'threads_per_job': n_threads, 'mem_limit': max_ram})
+        with open(os.path.join(config_folder, '%s.config' % name), 'w') as f:
+            json.dump(conf, f)
+
+    task = ProblemWorkflow(tmp_folder=tmp_folder, config_dir=config_folder,
+                           target=target, max_jobs=max_jobs,
+                           input_path=aff_path, input_key=aff_key,
+                           ws_path=seg_path, ws_key=seg_key,
+                           problem_path=out_path)
+    ret = luigi.build([task], local_scheduler=True)
+    assert ret, "Problem extraction failed"
