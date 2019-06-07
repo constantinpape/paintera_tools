@@ -3,7 +3,7 @@ import json
 import luigi
 from cluster_tools.paintera import ConversionWorkflow
 
-from ..default_config import get_default_group, get_default_shebang, get_default_block_shape
+from ..util import write_global_config
 
 
 def convert_to_paintera_format(path, raw_key, in_key, out_key,
@@ -12,16 +12,9 @@ def convert_to_paintera_format(path, raw_key, in_key, out_key,
                                assignment_path='', assignment_key=''):
 
     config_folder = os.path.join(tmp_folder, 'configs')
-    os.makedirs(config_folder, exist_ok=True)
+    write_global_config(config_folder)
+
     configs = ConversionWorkflow.get_config()
-
-    global_config = configs['global']
-    global_config.update({'shebang': get_default_shebang(),
-                          'group': get_default_group(),
-                          'block_shape': get_default_block_shape})
-    with open(os.path.join(config_folder, 'global.config'), 'w') as f:
-        json.dump(global_config, f)
-
     config = configs['downscaling']
     config.update({"library_kwargs": {"order": 0}, "mem_limit": 12, "time_limit": 120})
     with open(os.path.join(config_folder, "downscaling.config"), 'w') as f:
