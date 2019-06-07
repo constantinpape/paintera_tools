@@ -12,6 +12,14 @@ import nifty.tools as nt
 from cluster_tools.workflows import ProblemWorkflow
 
 
+def interactive_splitter():
+    pass
+
+
+def batch_splitter():
+    pass
+
+
 def compute_graph_and_weights(aff_path, aff_key, seg_path, seg_key, out_path,
                               tmp_folder, target, max_jobs,
                               offsets=[[-1, 0, 0], [0, -1, 0], [0, 0, -1]]):

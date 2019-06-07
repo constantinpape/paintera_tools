@@ -1,8 +1,9 @@
 import os
 import json
 import luigi
-
 from cluster_tools.paintera import ConversionWorkflow
+
+from ..default_config import get_default_group, get_default_shebang, get_default_block_shape
 
 
 def convert_to_paintera_format(path, raw_key, in_key, out_key,
@@ -15,9 +16,9 @@ def convert_to_paintera_format(path, raw_key, in_key, out_key,
     configs = ConversionWorkflow.get_config()
 
     global_config = configs['global']
-    shebang = '#! /g/kreshuk/pape/Work/software/conda/miniconda3/envs/cluster_env37/bin/python'
-    block_shape = [50, 512, 512]
-    global_config.update({'shebang': shebang, 'block_shape': block_shape})
+    global_config.update({'shebang': get_default_shebang(),
+                          'group': get_default_group(),
+                          'block_shape': get_default_block_shape})
     with open(os.path.join(config_folder, 'global.config'), 'w') as f:
         json.dump(global_config, f)
 

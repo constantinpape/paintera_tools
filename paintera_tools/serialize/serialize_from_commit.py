@@ -6,56 +6,8 @@ import luigi
 import vigra
 import z5py
 from cluster_tools.write import WriteLocal, WriteSlurm
-from cluster_tools.relabel import UniqueWorkflow
 
-from .util import save_assignments
-
-
-def write_global_config(tmp_folder, path, key):
-    config_folder = os.path.join(tmp_folder, 'configs')
-    os.makedirs(config_folder, exist_ok=True)
-    global_config = WriteLocal.default_global_config()
-
-    with z5py.File(path) as f:
-        block_shape = f[key].chunks
-
-    # TODO allow specifying the shebang
-    shebang = '#! /g/kreshuk/pape/Work/software/conda/miniconda3/envs/cluster_env37/bin/python'
-    global_config['shebang'] = shebang
-    global_config.update({'shebang': shebang, 'block_shape': block_shape})
-    with open(os.path.join(config_folder, 'global.config'), 'w') as f:
-        json.dump(global_config, f)
-
-
-def find_uniques(path, seg_in_key, out_path, out_key,
-                 tmp_folder, max_jobs, target):
-    task = UniqueWorkflow
-    config_folder = os.path.join(tmp_folder, 'configs')
-
-    t = task(tmp_folder=tmp_folder, config_dir=config_folder,
-             max_jobs=max_jobs, target=target,
-             input_path=path, input_key=seg_in_key,
-             output_path=out_path, output_key=out_key)
-    ret = luigi.build([t], local_scheduler=True)
-    if not ret:
-        raise RuntimeError("Writing merged segmentation failed")
-
-
-def make_dense_assignments(fragment_ids, assignments):
-
-    assignment_dict = dict(zip(assignments[:, 0], assignments[:, 1]))
-    dense_assignments = {frag_id: assignment_dict.get(frag_id, frag_id) for frag_id in fragment_ids}
-
-    # set the paintera ignore label assignment to 0
-    paintera_ignore_label = 18446744073709551615
-    if paintera_ignore_label in dense_assignments:
-        dense_assignments[paintera_ignore_label] = 0
-
-    frag_ids = np.array(list(dense_assignments.keys()), dtype='uint64')
-    seg_ids = np.array(list(dense_assignments.values()), dtype='uint64')
-    dense_assignments = np.concatenate([frag_ids[:, None], seg_ids[:, None]], axis=1)
-    assert dense_assignments.shape[1] == 2
-    return dense_assignments
+from ..util import save_assignments, make_dense_assignments, find_uniques, write_global_config
 
 
 # TODO wrap this in a luigi.Task
@@ -125,7 +77,10 @@ def serialize_from_commit(path, key, out_path, out_key,
     # prepare cluster tools tasks
     os.makedirs(tmp_folder, exist_ok=True)
     seg_in_key = os.path.join(key, seg_key, 's%i' % scale)
-    write_global_config(tmp_folder, path, seg_in_key)
+
+    config_folder = os.path.join(tmp_folder, 'configs')
+    block_shape = f[key][seg_in_key].chunks
+    write_global_config(config_folder, block_shape)
 
     save_path = os.path.join(tmp_folder, 'assignments.n5')
     unique_key = 'uniques'
@@ -135,7 +90,7 @@ def serialize_from_commit(path, key, out_path, out_key,
     # NOTE we need to find uniques always at scale 0
     seg_zero_key = os.path.join(key, seg_key, 's0')
     find_uniques(path, seg_zero_key, save_path, unique_key,
-                 tmp_folder, max_jobs, target)
+                 tmp_folder, config_folder, max_jobs, target)
 
     # 2.) make and serialize new assignments
     print("Serializing assignments ...")
