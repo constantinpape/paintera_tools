@@ -45,7 +45,7 @@ def find_uniques(path, seg_in_key, out_path, out_key,
              output_path=out_path, output_key=out_key)
     ret = luigi.build([t], local_scheduler=True)
     if not ret:
-        raise RuntimeError("Writing merged segmentation failed")
+        raise RuntimeError("Find uniques failed")
 
 
 def write_global_config(config_folder, block_shape=None):

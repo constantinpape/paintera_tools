@@ -3,7 +3,7 @@ import json
 import numpy as np
 from concurrent import futures
 from threading import Lock
-from copy import deepcopy
+from functools import partial
 
 import z5py
 import vigra
@@ -18,7 +18,7 @@ from ..util import compute_graph_and_weights, make_dense_assignments, find_uniqu
 def load_paintera_assignments(paintera_path, data_key, assignment_key,
                               exp_path, tmp_folder, max_jobs, target):
     tmp_key = 'uniques'
-    # NOTE the config is already written by conpute_graph_and_weights
+    # NOTE the config is already written by compute_graph_and_weights
     config_folder = os.path.join(tmp_folder, 'configs')
     find_uniques(paintera_path, data_key, exp_path, tmp_key,
                  tmp_folder, config_folder, max_jobs, target)
@@ -34,23 +34,24 @@ def load_paintera_assignments(paintera_path, data_key, assignment_key,
 
 def prepare_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
                      exp_path, tmp_folder, target, max_jobs, backup_assignments=True):
-    assignment_key = 'fragment-segment-assignments'
+    assignment_key = 'fragment-segment-assignment'
     data_key = 'data/s0'
     g = z5py.File(paintera_path)[paintera_key]
     assert assignment_key in g, "Can't find paintera assignments"
+    assignment_key = os.path.join(paintera_key, assignment_key)
     assert data_key in g, "Can't find paintera data"
+    data_key = os.path.join(paintera_key, data_key)
 
     # make backup of assignments
     if backup_assignments:
-        bkp_key = os.path.join(paintera_path, paintera_key, 'assignments-bkp')
-        print("Making back-up @", bkp_key)
-        copy_dataset(paintera_path, os.path.join(paintera_key, assignment_key),
-                     paintera_path, bkp_key, 4)
+        bkp_key = os.path.join(paintera_key, 'assignments-bkp')
+        print("Making back-up @", paintera_path, ":", bkp_key)
+        copy_dataset(paintera_path, paintera_path, assignment_key, bkp_key, 4)
 
     # make the problem
     compute_graph_and_weights(boundary_path, boundary_key,
-                              paintera_path, data_key, exp_path,
-                              tmp_folder, target, max_jobs)
+                              paintera_path, data_key,
+                              exp_path, tmp_folder, target, max_jobs)
 
     # load the assignments
     assignments = load_paintera_assignments(paintera_path, data_key, assignment_key,
@@ -58,18 +59,35 @@ def prepare_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
     return assignments
 
 
+def assignment_saver(path, key, n_threads, assignments):
+    assert assignments.ndim == 2
+    assert assignments.shape[1] == 2
+
+    f = z5py.File(path)
+    chunks = f[key].chunks
+    del f[key]
+
+    ass_t = assignments.T
+    ds = f.create_dataset(key, chunks=chunks, shape=ass_t.shape, compression='gzip',
+                          dtype=ass_t.dtype)
+    ds.n_threads = n_threads
+    ds[:] = ass_t
+
+
 def print_help():
     print("Interactive paintera splitting:")
-    print("[s]: enter split-mode")
-    print("[q]: end interactive splitting")
     print("[h]: display help message")
+    print("[q]: end interactive splitting")
+    print("[<segment-id>]: enter split-mode for <segment-id>")
     print("Split-mode:")
-    print("[n]: start new seed")
+    print("[c]: commit changes and return to root mode")
+    print("[d <id>]: discard seeds for given id (discards all seeds if no id is given)")
     print("[g <id>] go back to seed number <id>")
-    print("[s]: run watershed segmentation and save")
-    print("[u]: undo last seeds and segmentation")
-    print("[q]: return to interactive mode")
+    print("[l]: load saved seeds from json")
+    print("[n]: start new seed")
     print("[p]: save current seeds to json")
+    print("[q]: return to root mode without commiting")
+    print("[s]: run watershed segmentation and save")
 
 
 def isint(x):
@@ -89,20 +107,22 @@ def to_seeds(seeds_to_fragments):
 
 
 def save_seeds(save_path, seeds_to_fragments):
-    print("saving current seeds to", save_path)
     with open(save_path, 'w') as f:
-        json.dump(seeds_to_fragments, f)
+        json.dump(seeds_to_fragments, f, indent=4, sort_keys=True)
 
 
-def split_mode(splitter, assignments, ds_assignments):
-    print("Entering split-mode")
-    segment_id = input("enter the segment id of object to be split")
+def load_seeds(save_path):
     try:
-        segment_id = int(segment_id)
-    except ValueError:
-        print("Invalid input for segment id, leaving split-mode")
-        return
-    print("Splitting segment", segment_id)
+        with open(save_path) as f:
+            seeds_to_fragments = json.load(f)
+        seeds_to_fragments = {int(k): v for k, v in seeds_to_fragments.items()}
+        return seeds_to_fragments
+    except Exception:
+        return None
+
+
+def split_mode(segment_id, splitter, assignments, save_assignments):
+    print("Split-mode - Start splitting for segment", segment_id)
 
     # seed storage
     seeds_to_fragments = {1: []}
@@ -110,14 +130,13 @@ def split_mode(splitter, assignments, ds_assignments):
     max_seed_id = 1
 
     # last step backup for undo functionality
-    previous_assignments = assignments.copy()
-    previous_seeds = deepcopy(seeds_to_fragments)
+    current_assignments = assignments.copy()
 
     save_path = 'split_state_object_%i.json' % segment_id
     while True:
-        print("Split-mode: seeds and fragments", seeds_to_fragments)
-        print("Split-mode: current seed", current_seed_id)
-        x = input("Split-mode: waiting for input")
+        print("Split-mode - Seeds and fragments", seeds_to_fragments)
+        print("Split-mode - Current seed", current_seed_id)
+        x = input("Split-mode - Input fragment id or action: ")
         if isint(x):
             seeds_to_fragments[current_seed_id].append(int(x))
 
@@ -126,55 +145,95 @@ def split_mode(splitter, assignments, ds_assignments):
             current_seed_id = max_seed_id
             seeds_to_fragments[current_seed_id] = []
 
-        elif x == 's':
-            previous_assignments = assignments.copy()
-            previous_seeds = deepcopy(seeds_to_fragments)
-            seeds = to_seeds(seeds_to_fragments)
-            if seeds is None:
-                print("Split-mode: at least one seed is empty, aborting split action")
-                continue
-            assignments = splitter.split_segment(segment_id, seeds, assignments)
-            ds_assignments[:] = assignments
-            print("Split-mode: have split segment and written new assignments, please reload paintera.")
-
-        elif x == 'u':
-            seeds_to_fragments = previous_seeds
-            assignments = previous_assignments
-
-        elif x == 'q':
-            x = input("Do you really want to quit split-mode? y / [n]")
-            if x.lower() == 'y':
-                break
-
         elif x.startswith('g'):
             try:
                 seed_id = int(x[1:])
             except ValueError:
-                print("Split-mode: Invaild input", x, "enter [h] for help")
+                print("Split-mode - Invaild input", x, "enter [h] for help")
                 continue
-            if seed_id < max_seed_id:
-                print("Split-mode: cannot select seed", seed_id)
+            if seed_id > max_seed_id:
+                print("Split-mode - Cannot select seed", seed_id)
                 continue
             current_seed_id = seed_id
+
+        elif x == 's':
+            # split the segment
+            seeds = to_seeds(seeds_to_fragments)
+            if seeds is None:
+                print("Split-mode - At least one seed is empty, aborting split action")
+                continue
+            split_assignments = splitter.split_segment(segment_id, seeds, assignments)
+            if split_assignments is None:
+                print("Split mode - Could not split with current seeds")
+                continue
+            current_assignments = split_assignments
+            # write new assignments
+            save_assignments(assignments=current_assignments)
+            print("Split-mode - Have split segment and written new assignments, reload paintera to update")
+
+        elif x == 'c':
+            x = input("Do you want to commit the assignments and quit split-mode? y / [n] ")
+            if x.lower() == 'y':
+                return current_assignments
+
+        elif x == 'q':
+            x = input("Do you want to quit split-mode without committing? y / [n] ")
+            if x.lower() == 'y':
+                # Need to reset to initial assignments
+                save_assignments(assignments=assignments)
+                return assignments
 
         elif x == 'h':
             print_help()
 
         elif x == 'p':
+            print("Split-mode - Saving current seeds to", save_path)
             save_seeds(save_path, seeds_to_fragments)
 
+        elif x == 'l':
+            print("Split-mode - Loading seeds from", save_path)
+            loaded = load_seeds(save_path)
+            if loaded is None:
+                print("Split-mode - Could not load seeds, doing nothing")
+                continue
+            seeds_to_fragments = loaded
+            max_seed_id = max(seeds_to_fragments.keys())
+            if current_seed_id > max_seed_id:
+                current_seed_id = 1
+
+        elif x.startswith('d'):
+            if x == 'd':
+                y = input("Do you want to clear all seeds? y / [n] ")
+                if y.lower() == 'y':
+                    seeds_to_fragments = {1: []}
+            elif isint(x[1:]):
+                seed_id = int(x[1:])
+                if seed_id > max_seed_id:
+                    print("Split-mode - Cannot select seed", seed_id)
+                    continue
+                y = input("Do you want to clear seed %i? y / [n] " % seed_id)
+                if y.lower() == 'y':
+                    seeds_to_fragments[seed_id] = []
+            else:
+                print("Split-mode - Invaild input", x, "enter [h] for help")
+                continue
+
         else:
-            print("Split-mode: Invaild input", x, "enter [h] for help")
+            print("Split-mode - Invaild input", x, "enter [h] for help")
 
 
 # TODO delay keyboard interrupt and save when it's called
-def interactive_step(splitter, assignments, ds_assignments):
-    x = input("Interactive splitting: waiting for input")
-    if x == 's':
-        split_mode(splitter)
+def interactive_step(splitter, assignments, save_assignments):
+    x = input("Interactive splitting - Input segment id or action: ")
+    if isint(x):
+        segment_id = int(x)
+        if segment_id not in assignments[:, 1]:
+            print("Interactive splitting - Segment id", segment_id, "is not part of assignment table")
+            return True
+        assignments = split_mode(segment_id, splitter, assignments, save_assignments)
         return True
     elif x == 'q':
-        x = input("Do you really want to quit interactive splitting? y / [n]")
+        x = input("Do you want to quit interactive splitting? y / [n] ")
         if x.lower() == 'y':
             return False
         else:
@@ -183,7 +242,7 @@ def interactive_step(splitter, assignments, ds_assignments):
         print_help()
         return True
     else:
-        print("Invaild input", x, "enter [h] for help")
+        print("Interarctive splitting - Invaild input", x, "enter [h] for help")
         return True
 
 
@@ -209,19 +268,16 @@ def interactive_splitter(paintera_path, paintera_key, boundary_path, boundary_ke
         return
 
     # make splitter
-    splitter = Splitter(exp_path, 's0/graph', exp_path, 'features',
-                        assignments, n_threads)
+    splitter = Splitter(exp_path, 's0/graph', exp_path, 'features', n_threads)
 
-    assignment_key = os.path.join(paintera_key, 'fragment-segment-assignments')
-    ds_assignments = z5py.File(paintera_path)[assignment_key]
-    ds_assignments.n_threads = n_threads
+    assignment_key = os.path.join(paintera_key, 'fragment-segment-assignment')
+    save_assignments = partial(assignment_saver, path=paintera_path, key=assignment_key,
+                               n_threads=n_threads)
 
-    print("Start interactive splitting session")
     print_help()
-
     # start interactive splitting session
     while True:
-        if not interactive_step(splitter):
+        if not interactive_step(splitter, assignments, save_assignments):
             break
 
 
@@ -236,15 +292,13 @@ def batch_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
         raise NotImplementedError("Batch splitting is only implemented locally.")
 
     # make splitter
-    splitter = Splitter(exp_path, 's0/graph', exp_path, 'features',
-                        assignments, n_threads)
+    splitter = Splitter(exp_path, 's0/graph', exp_path, 'features', n_threads)
     assignments = splitter.split_multiple_segments(segment_ids, all_seed_fragments,
                                                    assignments, n_threads)
 
-    assignment_key = os.path.join(paintera_key, 'fragment-segment-assignments')
-    ds_assignments = z5py.File(paintera_path)[assignment_key]
-    ds_assignments.n_threads = n_threads
-    ds_assignments[:] = assignments
+    assignment_key = os.path.join(paintera_key, 'fragment-segment-assignment')
+    assignment_saver(path=paintera_path, key=assignment_key, n_threads=n_threads,
+                     assignments=assignments)
 
 
 # - split segment from seeds
@@ -323,9 +377,10 @@ class Splitter:
         split_assignments = self._split_segment_impl(fragment_ids, seed_fragments)
 
         # offset the split_assignments
+        new_assignments = assignments.copy()
         split_assignments[split_assignments != 0] += max_id
-        assignments[segment_mask] = split_assignments
-        return assignments
+        new_assignments[segment_mask] = split_assignments
+        return new_assignments
 
     def split_multiple_segments(self, segment_ids, all_seed_fragments, assignments, n_threads):
         assert isinstance(segment_ids, int)
