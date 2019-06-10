@@ -79,7 +79,7 @@ def serialize_from_commit(path, key, out_path, out_key,
     seg_in_key = os.path.join(key, seg_key, 's%i' % scale)
 
     config_folder = os.path.join(tmp_folder, 'configs')
-    block_shape = f[key][seg_in_key].chunks
+    block_shape = f[seg_in_key].chunks
     write_global_config(config_folder, block_shape)
 
     save_path = os.path.join(tmp_folder, 'assignments.n5')
@@ -87,9 +87,7 @@ def serialize_from_commit(path, key, out_path, out_key,
     assignment_key = 'assignments'
 
     # 1.) find the unique ids in the base segemntation
-    # NOTE we need to find uniques always at scale 0
-    seg_zero_key = os.path.join(key, seg_key, 's0')
-    find_uniques(path, seg_zero_key, save_path, unique_key,
+    find_uniques(path, seg_in_key, save_path, unique_key,
                  tmp_folder, config_folder, max_jobs, target)
 
     # 2.) make and serialize new assignments
