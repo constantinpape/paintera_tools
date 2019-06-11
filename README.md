@@ -1,6 +1,6 @@
 # paintera_tools
 
-Tools for genetrating curating and merging paintera datasets
+Tools for genetrating, curating and merging paintera datasets.
 
 ## Functionality
 
@@ -12,9 +12,13 @@ The three main applications are:
 
 ## Installation
 
-This package relies on [cluster_tools](https://github.com/constantinpape/cluster_tools).
-It should be used from a conda environment with cluster tools and all its dependencies.
-I will try to push both cluster_tools and paintera_tools to conda-forge soon.
+You can install this package via conda (only python 3.7 and linux for now):
+```
+conda install -c conda-forge -c cpape paintera_tools
+```
+
+To set up a developement environment, you will need [cluster_tools](https://github.com/constantinpape/cluster_tools)
+and its dependencies.
 
 ## Usage
 
