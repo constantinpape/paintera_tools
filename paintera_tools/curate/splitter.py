@@ -10,7 +10,6 @@ import vigra
 import nifty
 import nifty.distributed as ndist
 import nifty.tools as nt
-from z5py.util import copy_dataset
 
 from ..util import compute_graph_and_weights, make_dense_assignments, find_uniques
 
@@ -38,15 +37,17 @@ def prepare_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
     data_key = 'data/s0'
     g = z5py.File(paintera_path)[paintera_key]
     assert assignment_key in g, "Can't find paintera assignments"
-    assignment_key = os.path.join(paintera_key, assignment_key)
     assert data_key in g, "Can't find paintera data"
-    data_key = os.path.join(paintera_key, data_key)
 
     # make backup of assignments
     if backup_assignments:
         bkp_key = os.path.join(paintera_key, 'assignments-bkp')
         print("Making back-up @", paintera_path, ":", bkp_key)
-        copy_dataset(paintera_path, paintera_path, assignment_key, bkp_key, 4)
+        assignments = g[assignment_key][:].T
+        assignment_saver(paintera_path, bkp_key, 1, assignments)
+
+    assignment_key = os.path.join(paintera_key, assignment_key)
+    data_key = os.path.join(paintera_key, data_key)
 
     # make the problem
     compute_graph_and_weights(boundary_path, boundary_key,
@@ -124,6 +125,10 @@ def load_seeds(save_path):
 def split_mode(segment_id, splitter, assignments, save_assignments):
     print("Split-mode - Start splitting for segment", segment_id)
 
+    # find valid fragment ids for this segment id
+    valid_fragments = assignments[:, 0][assignments[:, 1] == segment_id]
+    print("Split-mode - Segment", segment_id, "is made up of", len(valid_fragments), "fragments")
+
     # seed storage
     seeds_to_fragments = {1: []}
     current_seed_id = 1
@@ -138,7 +143,11 @@ def split_mode(segment_id, splitter, assignments, save_assignments):
         print("Split-mode - Current seed", current_seed_id)
         x = input("Split-mode - Input fragment id or action: ")
         if isint(x):
-            seeds_to_fragments[current_seed_id].append(int(x))
+            fragment_id = int(x)
+            if fragment_id not in valid_fragments:
+                print("Split-mode: fragment", fragment_id, "is not part of the current segment", segment_id)
+                continue
+            seeds_to_fragments[current_seed_id].append(fragment_id)
 
         elif x == 'n':
             max_seed_id += 1
@@ -368,8 +377,8 @@ class Splitter:
         max_id = int(assignments.max())
 
         # get fragments and segment mask
-        segment_mask = assignments[1] == segment_id
-        fragment_ids = assignments[0][segment_mask]
+        segment_mask = assignments[:, 1] == segment_id
+        fragment_ids = assignments[:, 0][segment_mask]
         if not fragment_ids.size:
             return None
 
@@ -379,11 +388,11 @@ class Splitter:
         # offset the split_assignments
         new_assignments = assignments.copy()
         split_assignments[split_assignments != 0] += max_id
-        new_assignments[segment_mask] = split_assignments
+        new_assignments[:, 1][segment_mask] = split_assignments
         return new_assignments
 
     def split_multiple_segments(self, segment_ids, all_seed_fragments, assignments, n_threads):
-        assert isinstance(segment_ids, int)
+        assert isinstance(segment_ids, list)
         assert isinstance(all_seed_fragments, list)
         assert len(segment_ids) == len(all_seed_fragments)
         # TODO not really sure that this is the correct check
@@ -392,14 +401,17 @@ class Splitter:
         lock = Lock()
 
         def _split(segment_id, seed_fragments):
-            segment_mask = assignments[1] == segment_id
-            fragment_ids = assignments[0][segment_mask]
+            segment_mask = assignments[:, 1] == segment_id
+            # do nothing if the segment mask is empty
+            if segment_mask.sum() == 0:
+                return
+            fragment_ids = assignments[:, 0][segment_mask]
             split_assignments = self._split_segment_impl(fragment_ids,
                                                          seed_fragments)
             with lock:
                 max_id = int(assignments.max())
                 split_assignments[split_assignments != 0] += max_id
-                assignments[segment_mask] = split_assignments
+                assignments[:, 1][segment_mask] = split_assignments
 
         with futures.ThreadPoolExecutor(n_threads) as tp:
             tasks = [tp.submit(_split, segment_id, seed_fragments)
