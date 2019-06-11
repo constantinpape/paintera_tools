@@ -4,6 +4,8 @@ from paintera_tools import set_default_shebang
 
 def convert_cremi():
     path = '/g/kreshuk/data/cremi/example/sampleA.n5'
+    # NOTE: the raw data needs to be multiscale, i.e. 'raw_key' needs to be a group with
+    # datasets 'raw_key/s0' ... 'raw_key/sN'. It's ok if there's only a single scale, i.e. 'raw_key/s0'
     raw_key = 'raw'
     ass_key = 'node_labels'
     in_key = 'segmentation/watershed'
