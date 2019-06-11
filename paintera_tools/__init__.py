@@ -6,4 +6,4 @@ from .default_config import get_default_group, set_default_group
 from .default_config import get_default_shebang, set_default_shebang
 from .default_config import get_default_block_shape, set_default_block_shape
 
-__version__ = '0.0.0'
+__version__ = '0.1.0'
