@@ -44,7 +44,8 @@ def prepare_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
         bkp_key = os.path.join(paintera_key, 'assignments-bkp')
         print("Making back-up @", paintera_path, ":", bkp_key)
         assignments = g[assignment_key][:].T
-        assignment_saver(paintera_path, bkp_key, 1, assignments)
+        chunks = g[assignment_key].chunks
+        assignment_saver(paintera_path, bkp_key, 1, assignments, chunks)
 
     assignment_key = os.path.join(paintera_key, assignment_key)
     data_key = os.path.join(paintera_key, data_key)
@@ -60,13 +61,14 @@ def prepare_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
     return assignments
 
 
-def assignment_saver(path, key, n_threads, assignments):
+def assignment_saver(path, key, n_threads, assignments, chunks=None):
     assert assignments.ndim == 2
     assert assignments.shape[1] == 2
 
     f = z5py.File(path)
-    chunks = f[key].chunks
-    del f[key]
+    chunks = f[key].chunks if chunks is None else chunks
+    if key in f:
+        del f[key]
 
     ass_t = assignments.T
     ds = f.create_dataset(key, chunks=chunks, shape=ass_t.shape, compression='gzip',
