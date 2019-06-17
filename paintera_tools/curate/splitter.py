@@ -11,24 +11,7 @@ import nifty
 import nifty.distributed as ndist
 import nifty.tools as nt
 
-from ..util import compute_graph_and_weights, make_dense_assignments, find_uniques
-
-
-def load_paintera_assignments(paintera_path, data_key, assignment_key,
-                              exp_path, tmp_folder, max_jobs, target):
-    tmp_key = 'uniques'
-    # NOTE the config is already written by compute_graph_and_weights
-    config_folder = os.path.join(tmp_folder, 'configs')
-    find_uniques(paintera_path, data_key, exp_path, tmp_key,
-                 tmp_folder, config_folder, max_jobs, target)
-    # load the unique ids
-    f = z5py.File(exp_path)
-    fragment_ids = f[tmp_key][:]
-
-    # load the assignments
-    f = z5py.File(paintera_path)
-    assignments = f[assignment_key][:].T
-    return make_dense_assignments(fragment_ids, assignments)
+from ..util import compute_graph_and_weights
 
 
 def prepare_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
@@ -47,17 +30,12 @@ def prepare_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
         chunks = g[assignment_key].chunks
         assignment_saver(paintera_path, bkp_key, 1, assignments, chunks)
 
-    assignment_key = os.path.join(paintera_key, assignment_key)
-    data_key = os.path.join(paintera_key, data_key)
-
     # make the problem
+    data_key = os.path.join(paintera_key, data_key)
     compute_graph_and_weights(boundary_path, boundary_key,
                               paintera_path, data_key,
                               exp_path, tmp_folder, target, max_jobs)
 
-    # load the assignments
-    assignments = load_paintera_assignments(paintera_path, data_key, assignment_key,
-                                            exp_path, tmp_folder, max_jobs, target)
     return assignments
 
 
@@ -258,7 +236,7 @@ def interactive_step(splitter, assignments, save_assignments):
 
 
 def interactive_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
-                         tmp_folder, target, max_jobs, n_threads):
+                         tmp_folder, target, max_jobs, n_threads, ignore_label=None):
     """ Interactive splitting of merged paintera objects.
 
     Arguments:
@@ -279,7 +257,8 @@ def interactive_splitter(paintera_path, paintera_key, boundary_path, boundary_ke
         return
 
     # make splitter
-    splitter = Splitter(exp_path, 's0/graph', exp_path, 'features', n_threads)
+    splitter = Splitter(exp_path, 's0/graph', exp_path, 'features', n_threads,
+                        ignore_label=ignore_label)
 
     assignment_key = os.path.join(paintera_key, 'fragment-segment-assignment')
     save_assignments = partial(assignment_saver, path=paintera_path, key=assignment_key,
@@ -294,7 +273,8 @@ def interactive_splitter(paintera_path, paintera_key, boundary_path, boundary_ke
 
 def batch_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
                    segment_ids, all_seed_fragments,
-                   tmp_folder, target, max_jobs, n_threads):
+                   tmp_folder, target, max_jobs, n_threads,
+                   ignore_label=None):
     exp_path = os.path.join(tmp_folder, 'data.n5')
     assignments = prepare_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
                                    exp_path, tmp_folder, target, max_jobs)
@@ -303,7 +283,8 @@ def batch_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
         raise NotImplementedError("Batch splitting is only implemented locally.")
 
     # make splitter
-    splitter = Splitter(exp_path, 's0/graph', exp_path, 'features', n_threads)
+    splitter = Splitter(exp_path, 's0/graph', exp_path, 'features', n_threads,
+                        ignore_label=ignore_label)
     assignments = splitter.split_multiple_segments(segment_ids, all_seed_fragments,
                                                    assignments, n_threads)
 
@@ -318,7 +299,7 @@ def batch_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
 class Splitter:
     def __init__(self, graph_path, graph_key,
                  weights_path, weights_key,
-                 n_threads):
+                 n_threads, ignore_label=None):
         self.n_threads = n_threads
 
         # load graph and weights
@@ -329,6 +310,11 @@ class Splitter:
         weight_ds.n_threads = self.n_threads
         self.weights = weight_ds[:, 0].squeeze() if weight_ds.ndim == 2 else weight_ds[:]
         assert len(self.weights) == self.graph.numberOfEdges
+
+        # we need to set the ignore label to be max repulsve
+        if ignore_label is not None:
+            ignore_mask = (self.uv_ids == ignore_label).any(axis=1)
+            self.weights[ignore_mask] = 1.
 
     #
     # split segment functionality
@@ -358,7 +344,12 @@ class Splitter:
         # TODO vectorize
         for seed_group in seed_fragments:
             for seed_fragment in seed_group:
-                mapped_id = mapping[seed_fragment]
+                # assert seed_fragment in fragment_ids, str(seed_fragment)
+                mapped_id = mapping.get(seed_fragment, None)
+                # FIXME I don't really know why this would happen, do assignments go stale ?
+                if mapped_id is None:
+                    print("Warning: could not find seed-fragment", seed_fragment)
+                    continue
                 sub_seeds[mapped_id] = seed_id
             seed_id += 1
 
@@ -397,9 +388,6 @@ class Splitter:
         assert isinstance(segment_ids, list)
         assert isinstance(all_seed_fragments, list)
         assert len(segment_ids) == len(all_seed_fragments)
-        # TODO not really sure that this is the correct check
-        assert len(assignments) == self.graph.numberOfNodes, "%i, %i" % (len(assignments),
-                                                                         self.graph.numberOfNodes)
         lock = Lock()
 
         def _split(segment_id, seed_fragments):

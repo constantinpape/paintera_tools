@@ -19,6 +19,11 @@ def save_assignments(assignments, save_path, save_key):
     ds[:] = assignments
 
 
+# TODO there is an issue when using this with 'Splitter'.
+# I don't know if there is something wrong in the logic of 'Splitter'
+# or if there is an issue with this function.
+# 'Splitter' actually doesn't need dense ids, but if this function doesn't work properly,
+# this might have implications for 'serialize_from_commit'
 def make_dense_assignments(fragment_ids, assignments):
 
     assignment_dict = dict(zip(assignments[:, 0], assignments[:, 1]))
@@ -74,6 +79,13 @@ def compute_graph_and_weights(aff_path, aff_key,
     if offsets is not None:
         conf.update({'offsets': offsets})
     with open(os.path.join(config_folder, 'block_edge_features.config'), 'w') as f:
+        json.dump(conf, f)
+
+    # NOTE: we don't want to exclude the ignore label from the graph here, but rather
+    # set the costs to max repulsive later
+    conf = configs['initial_sub_graphs']
+    conf.update({'ignore_label': False})
+    with open(os.path.join(config_folder, 'initial_sub_graphs.config'), 'w') as f:
         json.dump(conf, f)
 
     conf_names = ['merge_sub_graphs', 'map_edge_ids', 'merge_edge_features']
