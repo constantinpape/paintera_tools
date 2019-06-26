@@ -1,5 +1,6 @@
 from .convert import convert_to_paintera_format
 from .curate import interactive_splitter, batch_splitter
+from .curate import connected_components_and_size_filter
 from .serialize import serialize_from_commit, serialize_from_project
 
 from .default_config import get_default_group, set_default_group

@@ -70,7 +70,8 @@ def compute_graph_and_weights(aff_path, aff_key,
                               tmp_folder, target, max_jobs,
                               offsets=[[-1, 0, 0], [0, -1, 0], [0, 0, -1]]):
     config_folder = os.path.join(tmp_folder, 'configs')
-    chunks = z5py.File(seg_path, 'r')[seg_key].chunks
+    # chunks = z5py.File(seg_path, 'r')[seg_key].chunks
+    chunks = None
     write_global_config(config_folder, chunks)
 
     configs = ProblemWorkflow.get_config()
@@ -84,17 +85,17 @@ def compute_graph_and_weights(aff_path, aff_key,
     # NOTE: we don't want to exclude the ignore label from the graph here, but rather
     # set the costs to max repulsive later
     conf = configs['initial_sub_graphs']
-    conf.update({'ignore_label': False})
+    conf.update({'ignore_label': False, 'mem_limit': 8})
     with open(os.path.join(config_folder, 'initial_sub_graphs.config'), 'w') as f:
         json.dump(conf, f)
 
     conf_names = ['merge_sub_graphs', 'map_edge_ids', 'merge_edge_features']
     # TODO make this configurable
     n_threads = 12
-    max_ram = 64
+    max_ram = 256
     for name in conf_names:
         conf = configs[name]
-        conf.update({'threads_per_job': n_threads, 'mem_limit': max_ram})
+        conf.update({'threads_per_job': n_threads, 'mem_limit': max_ram, 'time_limit': 120})
         with open(os.path.join(config_folder, '%s.config' % name), 'w') as f:
             json.dump(conf, f)
 
