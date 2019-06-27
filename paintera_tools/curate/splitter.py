@@ -1,8 +1,6 @@
 import os
 import json
 import numpy as np
-from concurrent import futures
-from threading import Lock
 from functools import partial
 
 import z5py
@@ -388,9 +386,12 @@ class Splitter:
         assert isinstance(segment_ids, list)
         assert isinstance(all_seed_fragments, list)
         assert len(segment_ids) == len(all_seed_fragments)
-        lock = Lock()
 
-        def _split(segment_id, seed_fragments):
+        next_id = int(assignments.max()) + 1
+        for segment_id, seed_fragments in zip(segment_ids, all_seed_fragments):
+            print("Splitting segment id", segment_id)
+            print("into %i new segments", len(seed_fragments))
+
             segment_mask = assignments[:, 1] == segment_id
             # do nothing if the segment mask is empty
             if segment_mask.sum() == 0:
@@ -398,14 +399,8 @@ class Splitter:
             fragment_ids = assignments[:, 0][segment_mask]
             split_assignments = self._split_segment_impl(fragment_ids,
                                                          seed_fragments)
-            with lock:
-                max_id = int(assignments.max())
-                split_assignments[split_assignments != 0] += max_id
-                assignments[:, 1][segment_mask] = split_assignments
+            split_assignments[split_assignments != 0] += next_id
+            assignments[:, 1][segment_mask] = split_assignments
+            next_id = int(assignments.max()) + 1
 
-        with futures.ThreadPoolExecutor(n_threads) as tp:
-            tasks = [tp.submit(_split, segment_id, seed_fragments)
-                     for segment_id, seed_fragments in zip(segment_ids,
-                                                           all_seed_fragments)]
-            [t.result() for t in tasks]
         return assignments
