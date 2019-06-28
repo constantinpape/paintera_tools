@@ -46,6 +46,7 @@ def prepare_postprocesing(paintera_path, paintera_key,
         assignment_saver(paintera_path, bkp_key, n_threads,
                          assignments, chunks)
 
+    exp_path = ''
     f = z5py.File(exp_path)
 
     # load the graph node ids (= watershed / fragment ids)
@@ -138,7 +139,6 @@ def size_filter(paintera_path, paintera_key,
                 target, max_jobs, n_threads,
                 backup_assignments=True):
     assignment_key = 'fragment-segment-assignment'
-    ass_tmp_key = 'assignments/initial'
     data_key = 'data/s0'
     g = z5py.File(paintera_path)[paintera_key]
     assert assignment_key in g, "Can't find paintera assignments"
@@ -168,7 +168,7 @@ def size_filter(paintera_path, paintera_key,
     with z5py.File(relabeled_assignment_path, 'r') as f:
         ds_relabeled = f[relabeled_assignment_key]
         ds_relabeled.n_threads = n_threads
-        relabeled_assignments = ds[:, 1]
+        relabeled_assignments = ds_relabeled[:, 1]
 
     f = z5py.File(exp_path)
     new_assignment_key = 'assignments/relabeled_assignments'
@@ -192,7 +192,19 @@ def size_filter(paintera_path, paintera_key,
     ret = luigi.build([t], local_scheduler=True)
     assert ret, "Size filter failed"
 
-    # 5.) load the new assignments, bring to paintera format and save
+    # 5.) backup the chunks if specified
+    ff = z5py.File(paintera_path)
+    ds_ass = ff[paintera_path][assignment_key]
+    chunks = ds_ass.chunks
+    if backup_assignments:
+        bkp_key = os.path.join(paintera_key, 'assignments-bkp')
+        ds_ass.n_threads = n_threads
+        assignments = ds_ass[:]
+        print("Making back-up @", paintera_path, ":", bkp_key)
+        assignment_saver(paintera_path, bkp_key, n_threads,
+                         assignments, chunks)
+
+    # 6.) load the new assignments, bring to paintera format and save
     f = z5py.File(exp_path)
     ds_ass = f[ass_filtered_key]
     ds_ass.n_threads = n_threads
