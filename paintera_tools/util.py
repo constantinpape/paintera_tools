@@ -19,6 +19,22 @@ def save_assignments(assignments, save_path, save_key):
     ds[:] = assignments
 
 
+def assignment_saver(path, key, n_threads, assignments, chunks=None):
+    assert assignments.ndim == 2
+    assert assignments.shape[1] == 2
+
+    f = z5py.File(path)
+    chunks = f[key].chunks if chunks is None else chunks
+    if key in f:
+        del f[key]
+
+    ass_t = assignments.T
+    ds = f.create_dataset(key, chunks=chunks, shape=ass_t.shape, compression='gzip',
+                          dtype=ass_t.dtype)
+    ds.n_threads = n_threads
+    ds[:] = ass_t
+
+
 # TODO there is an issue when using this with 'Splitter'.
 # I don't know if there is something wrong in the logic of 'Splitter'
 # or if there is an issue with this function.

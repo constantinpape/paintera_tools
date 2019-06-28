@@ -9,7 +9,7 @@ import nifty
 import nifty.distributed as ndist
 import nifty.tools as nt
 
-from ..util import compute_graph_and_weights
+from ..util import compute_graph_and_weights, assignment_saver
 
 
 def prepare_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
@@ -35,23 +35,6 @@ def prepare_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
         assignment_saver(paintera_path, bkp_key, 1, assignments, chunks)
 
     return assignments
-
-
-def assignment_saver(path, key, n_threads, assignments, chunks=None):
-    assert assignments.ndim == 2
-    assert assignments.shape[1] == 2
-
-    f = z5py.File(path)
-    chunks = f[key].chunks if chunks is None else chunks
-    if key in f:
-        del f[key]
-
-    ass_t = assignments.T
-    print(ass_t.shape)
-    ds = f.create_dataset(key, chunks=chunks, shape=ass_t.shape, compression='gzip',
-                          dtype=ass_t.dtype)
-    ds.n_threads = n_threads
-    ds[:] = ass_t
 
 
 def print_help():

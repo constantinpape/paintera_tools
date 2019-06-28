@@ -1,5 +1,5 @@
 import json
-from paintera_tools import interactive_splitter, batch_splitter
+from paintera_tools import interactive_splitter, batch_splitter, postprocess
 from paintera_tools import set_default_shebang
 
 
@@ -41,6 +41,27 @@ def batch_splitting():
                    tmp_folder, 'local', n_jobs, n_jobs)
 
 
+def run_postprocessing():
+    shebang = '#! /g/kreshuk/pape/Work/software/conda/miniconda3/envs/cluster_env37/bin/python'
+    set_default_shebang(shebang)
+
+    path = '/g/kreshuk/data/cremi/example/sampleA.n5'
+    key = 'paintera'
+    aff_key = 'volumes/affinities'
+
+    tmp_folder = 'tmp_pp'
+
+    target = 'local'
+    max_jobs = 4
+    n_threads = 4
+
+    postprocess(path, key, path, aff_key,
+                tmp_folder, target, max_jobs, n_threads,
+                size_threshold=1500, label=True,
+                backup_assignments=True)
+
+
 if __name__ == '__main__':
     # interactive_splitting()
-    batch_splitting()
+    # batch_splitting()
+    run_postprocessing()
