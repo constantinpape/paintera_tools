@@ -68,15 +68,17 @@ def write_global_config(config_folder, block_shape=None):
 def compute_graph_and_weights(aff_path, aff_key,
                               seg_path, seg_key, out_path,
                               tmp_folder, target, max_jobs,
-                              offsets=[[-1, 0, 0], [0, -1, 0], [0, 0, -1]]):
+                              offsets=[[-1, 0, 0], [0, -1, 0], [0, 0, -1]],
+                              with_costs=False):
     config_folder = os.path.join(tmp_folder, 'configs')
     # chunks = z5py.File(seg_path, 'r')[seg_key].chunks
     chunks = None
     write_global_config(config_folder, chunks)
 
+    qos = 'normal'
     configs = ProblemWorkflow.get_config()
     conf = configs['block_edge_features']
-    conf.update({'mem_limit': 4})
+    conf.update({'mem_limit': 6, 'qos': qos})
     if offsets is not None:
         conf.update({'offsets': offsets})
     with open(os.path.join(config_folder, 'block_edge_features.config'), 'w') as f:
@@ -85,17 +87,18 @@ def compute_graph_and_weights(aff_path, aff_key,
     # NOTE: we don't want to exclude the ignore label from the graph here, but rather
     # set the costs to max repulsive later
     conf = configs['initial_sub_graphs']
-    conf.update({'ignore_label': False, 'mem_limit': 8})
+    conf.update({'ignore_label': False, 'mem_limit': 6, 'qos': qos})
     with open(os.path.join(config_folder, 'initial_sub_graphs.config'), 'w') as f:
         json.dump(conf, f)
 
     conf_names = ['merge_sub_graphs', 'map_edge_ids', 'merge_edge_features']
     # TODO make this configurable
-    n_threads = 12
-    max_ram = 256
+    n_threads = 8
+    max_ram = 128
     for name in conf_names:
         conf = configs[name]
-        conf.update({'threads_per_job': n_threads, 'mem_limit': max_ram, 'time_limit': 120})
+        conf.update({'threads_per_job': n_threads, 'mem_limit': max_ram, 'time_limit': 120,
+                     'qos': qos})
         with open(os.path.join(config_folder, '%s.config' % name), 'w') as f:
             json.dump(conf, f)
 
@@ -103,6 +106,6 @@ def compute_graph_and_weights(aff_path, aff_key,
                            target=target, max_jobs=max_jobs,
                            input_path=aff_path, input_key=aff_key,
                            ws_path=seg_path, ws_key=seg_key,
-                           problem_path=out_path)
+                           problem_path=out_path, compute_costs=with_costs)
     ret = luigi.build([task], local_scheduler=True)
     assert ret, "Problem extraction failed"

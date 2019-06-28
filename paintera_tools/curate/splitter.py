@@ -20,6 +20,12 @@ def prepare_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
     assert assignment_key in g, "Can't find paintera assignments"
     assert data_key in g, "Can't find paintera data"
 
+    # make the problem
+    data_key = os.path.join(paintera_key, data_key)
+    compute_graph_and_weights(boundary_path, boundary_key,
+                              paintera_path, data_key,
+                              exp_path, tmp_folder, target, max_jobs)
+
     # make backup of assignments
     if backup_assignments:
         bkp_key = os.path.join(paintera_key, 'assignments-bkp')
@@ -27,12 +33,6 @@ def prepare_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
         assignments = g[assignment_key][:].T
         chunks = g[assignment_key].chunks
         assignment_saver(paintera_path, bkp_key, 1, assignments, chunks)
-
-    # make the problem
-    data_key = os.path.join(paintera_key, data_key)
-    compute_graph_and_weights(boundary_path, boundary_key,
-                              paintera_path, data_key,
-                              exp_path, tmp_folder, target, max_jobs)
 
     return assignments
 
@@ -47,6 +47,7 @@ def assignment_saver(path, key, n_threads, assignments, chunks=None):
         del f[key]
 
     ass_t = assignments.T
+    print(ass_t.shape)
     ds = f.create_dataset(key, chunks=chunks, shape=ass_t.shape, compression='gzip',
                           dtype=ass_t.dtype)
     ds.n_threads = n_threads
@@ -390,7 +391,7 @@ class Splitter:
         next_id = int(assignments.max()) + 1
         for segment_id, seed_fragments in zip(segment_ids, all_seed_fragments):
             print("Splitting segment id", segment_id)
-            print("into %i new segments", len(seed_fragments))
+            print("into %i new segments" % len(seed_fragments))
 
             segment_mask = assignments[:, 1] == segment_id
             # do nothing if the segment mask is empty
