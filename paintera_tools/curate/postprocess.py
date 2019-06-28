@@ -1,4 +1,5 @@
 import os
+import json
 import luigi
 import z5py
 import numpy as np
@@ -168,18 +169,29 @@ def size_filter(paintera_path, paintera_key,
     with z5py.File(relabeled_assignment_path, 'r') as f:
         ds_relabeled = f[relabeled_assignment_key]
         ds_relabeled.n_threads = n_threads
-        relabeled_assignments = ds_relabeled[:, 1]
+        relabeled_assignments = ds_relabeled[:]
+    # need to make assignments completely dense
+    node_ids, relabeled_assignments = relabeled_assignments[:, 0], relabeled_assignments[:, 1]
+    n_nodes = int(node_ids.max()) + 1
+    new_assignments = np.zeros(n_nodes, dtype='uint64')
+    new_assignments[node_ids] = relabeled_assignments
 
     f = z5py.File(exp_path)
     new_assignment_key = 'assignments/relabeled_assignments'
     chunks1d = (min(len(relabeled_assignments), 1000000),)
-    ds_out = f.require_dataset(new_assignment_key, shape=relabeled_assignments.shape, chunks=chunks1d,
+    ds_out = f.require_dataset(new_assignment_key, shape=new_assignments.shape, chunks=chunks1d,
                                compression='gzip', dtype='uint64')
-    ds_out[:] = relabeled_assignments
+    ds_out[:] = new_assignments
 
     # 4.) run size filter work-flow
-    ass_filtered_key = 'assignments/size_filtered'
     task = SizeFilterAndGraphWatershedWorkflow
+    configs = task.get_config()
+    conf = configs['graph_watershed_assignments']
+    conf.update({'n_threads': n_threads, 'mem_limit': 256, 'time_limit': 240})
+    with open(os.path.join(config_dir, 'graph_watershed_assignments.json'), 'w') as f:
+        json.dump(conf, f)
+
+    ass_filtered_key = 'assignments/size_filtered'
     t = task(tmp_folder=tmp_folder, config_dir=config_dir,
              max_jobs=max_jobs, target=target,
              problem_path=exp_path,
@@ -192,9 +204,9 @@ def size_filter(paintera_path, paintera_key,
     ret = luigi.build([t], local_scheduler=True)
     assert ret, "Size filter failed"
 
-    # 5.) backup the chunks if specified
+    # 5.) backup the assignments if specified
     ff = z5py.File(paintera_path)
-    ds_ass = ff[paintera_path][assignment_key]
+    ds_ass = ff[paintera_key][assignment_key]
     chunks = ds_ass.chunks
     if backup_assignments:
         bkp_key = os.path.join(paintera_key, 'assignments-bkp')
