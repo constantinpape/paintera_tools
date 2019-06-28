@@ -92,7 +92,8 @@ def postprocess(paintera_path, paintera_key,
         t = task(tmp_folder=tmp_folder, config_dir=config_dir,
                  max_jobs=max_jobs, target=target,
                  problem_path=exp_path, graph_key='s0/graph',
-                 path=paintera_path, fragments_key=data_key,
+                 path=paintera_path,
+                 fragments_key=os.path.join(paintera_key, data_key),
                  assignment_path=exp_path,
                  assignment_key=current_ass_key,
                  output_path=exp_path,
@@ -133,8 +134,7 @@ def postprocess(paintera_path, paintera_key,
     if backup_assignments:
         bkp_key = os.path.join(paintera_key, 'assignments-bkp')
         ds_ass.n_threads = n_threads
-        assignments = ds_ass[:]
-        print("Making back-up @", paintera_path, ":", bkp_key)
+        assignments = ds_ass[:].T
         assignment_saver(paintera_path, bkp_key, n_threads,
                          assignments, chunks)
 
