@@ -27,10 +27,10 @@ def prepare_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
                               exp_path, tmp_folder, target, max_jobs)
 
     # make backup of assignments
+    assignments = g[assignment_key][:].T
     if backup_assignments:
         bkp_key = os.path.join(paintera_key, 'assignments-bkp')
         print("Making back-up @", paintera_path, ":", bkp_key)
-        assignments = g[assignment_key][:].T
         chunks = g[assignment_key].chunks
         assignment_saver(paintera_path, bkp_key, 1, assignments, chunks)
 
@@ -256,10 +256,10 @@ def interactive_splitter(paintera_path, paintera_key, boundary_path, boundary_ke
 def batch_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
                    segment_ids, all_seed_fragments,
                    tmp_folder, target, max_jobs, n_threads,
-                   ignore_label=None):
+                   ignore_label=None, backup_assignments=True):
     exp_path = os.path.join(tmp_folder, 'data.n5')
     assignments = prepare_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
-                                   exp_path, tmp_folder, target, max_jobs)
+                                   exp_path, tmp_folder, target, max_jobs, backup_assignments=backup_assignments)
     # TODO implement this on the cluster
     if target != 'local':
         raise NotImplementedError("Batch splitting is only implemented locally.")
@@ -379,7 +379,8 @@ class Splitter:
             segment_mask = assignments[:, 1] == segment_id
             # do nothing if the segment mask is empty
             if segment_mask.sum() == 0:
-                return
+                print("Did not find any fragments for segment id", segment_id)
+                continue
             fragment_ids = assignments[:, 0][segment_mask]
             split_assignments = self._split_segment_impl(fragment_ids,
                                                          seed_fragments)
