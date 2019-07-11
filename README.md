@@ -1,6 +1,6 @@
 # paintera_tools
 
-Tools for genetrating, curating and merging paintera datasets.
+Tools for genetrating, curating and merging [paintera](https://github.com/saalfeldlab/paintera) datasets.
 
 ## Functionality
 
