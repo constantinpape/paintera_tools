@@ -9,7 +9,8 @@ from ..util import write_global_config
 def convert_to_paintera_format(path, raw_key, in_key, out_key,
                                label_scale, resolution,
                                tmp_folder, target, max_jobs, max_threads,
-                               assignment_path='', assignment_key=''):
+                               assignment_path='', assignment_key='',
+                               label_block_mapping_compression='gzip'):
 
     config_folder = os.path.join(tmp_folder, 'configs')
     write_global_config(config_folder)
@@ -21,7 +22,14 @@ def convert_to_paintera_format(path, raw_key, in_key, out_key,
         json.dump(config, f)
 
     block_mapping_conf = configs['label_block_mapping']
-    block_mapping_conf.update({'mem_limit': 100, 'time_limit': 360, 'threads_per_job': max_threads})
+    block_mapping_conf.update(
+        {
+            'mem_limit': 100,
+            'time_limit': 360,
+            'threads_per_job': max_threads,
+            'compression': label_block_mapping_compression
+        }
+    )
     with open(os.path.join(config_folder, 'label_block_mapping.config'), 'w') as f:
         json.dump(block_mapping_conf, f)
 

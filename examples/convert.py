@@ -42,7 +42,8 @@ def convert_cremi(input_path, with_assignments):
     convert_to_paintera_format(input_path, raw_key, in_key, out_key,
                                label_scale=0, resolution=res,
                                tmp_folder=tmp_folder, target='local', max_jobs=8, max_threads=8,
-                               assignment_path=ass_path, assignment_key=ass_key)
+                               assignment_path=ass_path, assignment_key=ass_key,
+                               label_block_mapping_compression='gzip')
 
 
 if __name__ == '__main__':
