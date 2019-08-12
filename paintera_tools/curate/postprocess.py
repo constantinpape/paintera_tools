@@ -6,7 +6,7 @@ import numpy as np
 
 from cluster_tools.postprocess import SizeFilterAndGraphWatershedWorkflow
 from cluster_tools.postprocess import ConnectedComponentsWorkflow
-from ..util import compute_graph_and_weights, assignment_saver
+from ..util import compute_graph_and_weights, assignment_saver, update_max_id
 from ..serialize import serialize_from_commit
 
 
@@ -149,3 +149,4 @@ def postprocess(paintera_path, paintera_key,
                                       new_assignments[:, None]], axis=1)
     assignment_saver(paintera_path, os.path.join(paintera_key, assignment_key),
                      n_threads, new_assignments, chunks)
+    update_max_id(paintera_path, paintera_key, new_assignments)

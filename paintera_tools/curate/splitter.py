@@ -9,7 +9,7 @@ import nifty
 import nifty.distributed as ndist
 import nifty.tools as nt
 
-from ..util import compute_graph_and_weights, assignment_saver
+from ..util import compute_graph_and_weights, assignment_saver, update_max_id
 
 
 def prepare_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
@@ -259,7 +259,8 @@ def batch_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
                    ignore_label=None, backup_assignments=True):
     exp_path = os.path.join(tmp_folder, 'data.n5')
     assignments = prepare_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
-                                   exp_path, tmp_folder, target, max_jobs, backup_assignments=backup_assignments)
+                                   exp_path, tmp_folder, target, max_jobs,
+                                   backup_assignments=backup_assignments)
     # TODO implement this on the cluster
     if target != 'local':
         raise NotImplementedError("Batch splitting is only implemented locally.")
@@ -273,6 +274,7 @@ def batch_splitter(paintera_path, paintera_key, boundary_path, boundary_key,
     assignment_key = os.path.join(paintera_key, 'fragment-segment-assignment')
     assignment_saver(path=paintera_path, key=assignment_key, n_threads=n_threads,
                      assignments=assignments)
+    update_max_id(paintera_path, paintera_key, assignments)
 
 
 # - split segment from seeds
@@ -384,7 +386,12 @@ class Splitter:
             fragment_ids = assignments[:, 0][segment_mask]
             split_assignments = self._split_segment_impl(fragment_ids,
                                                          seed_fragments)
-            split_assignments[split_assignments != 0] += next_id
+            # we might have zero-assignments if there were unconnected parts of the graph
+            # we need to leave them at the current id
+            zero_mask = split_assignments == 0
+            split_assignments[zero_mask] = segment_id
+            # the other assignments need to be offseted with the next id
+            split_assignments[np.logical_not(zero_mask)] += next_id
             assignments[:, 1][segment_mask] = split_assignments
             next_id = int(assignments.max()) + 1
 

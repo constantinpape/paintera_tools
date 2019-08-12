@@ -125,3 +125,10 @@ def compute_graph_and_weights(aff_path, aff_key,
                            problem_path=out_path, compute_costs=with_costs)
     ret = luigi.build([task], local_scheduler=True)
     assert ret, "Problem extraction failed"
+
+
+def update_max_id(paintera_path, paintera_key, assignments):
+    new_max_id = int(assignments.max())
+    with z5py.File(paintera_path) as f:
+        attrs = f[paintera_key].attrs
+        attrs['maxId'] = new_max_id
