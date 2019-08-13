@@ -8,6 +8,7 @@ from cluster_tools.relabel import UniqueWorkflow
 from cluster_tools.workflows import ProblemWorkflow
 
 from . import default_config
+PAINTERA_IGNORE_LABEL = 18446744073709551615
 
 
 def save_assignments(assignments, save_path, save_key):
@@ -46,9 +47,8 @@ def make_dense_assignments(fragment_ids, assignments):
     dense_assignments = {frag_id: assignment_dict.get(frag_id, frag_id) for frag_id in fragment_ids}
 
     # set the paintera ignore label assignment to 0
-    paintera_ignore_label = 18446744073709551615
-    if paintera_ignore_label in dense_assignments:
-        dense_assignments[paintera_ignore_label] = 0
+    if PAINTERA_IGNORE_LABEL in dense_assignments:
+        dense_assignments[PAINTERA_IGNORE_LABEL] = 0
 
     frag_ids = np.array(list(dense_assignments.keys()), dtype='uint64')
     seg_ids = np.array(list(dense_assignments.values()), dtype='uint64')

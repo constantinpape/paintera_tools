@@ -6,7 +6,7 @@ import numpy as np
 
 from cluster_tools.postprocess import SizeFilterAndGraphWatershedWorkflow
 from cluster_tools.postprocess import ConnectedComponentsWorkflow
-from ..util import compute_graph_and_weights, assignment_saver, update_max_id
+from ..util import compute_graph_and_weights, assignment_saver, update_max_id, PAINTERA_IGNORE_LABEL
 from ..serialize import serialize_from_commit
 
 
@@ -73,6 +73,13 @@ def postprocess(paintera_path, paintera_key,
 
     # need to make assignments completely dense
     node_ids, relabeled_assignments = relabeled_assignments[:, 0], relabeled_assignments[:, 1]
+
+    # hack for the paintera ignore id
+    paintera_hack = False
+    if PAINTERA_IGNORE_LABEL in node_ids:
+        paintera_hack = True
+        node_ids, relabeled_assignments = node_ids[:-1], relabeled_assignments[:-1]
+
     n_nodes = int(node_ids.max()) + 1
     new_assignments = np.zeros(n_nodes, dtype='uint64')
     new_assignments[node_ids] = relabeled_assignments
@@ -87,6 +94,13 @@ def postprocess(paintera_path, paintera_key,
     # 4.) run connected components if selected
     if label:
         task = ConnectedComponentsWorkflow
+
+        configs = task.get_config()
+        conf = configs['graph_connected_components']
+        conf.update({'threads_per_job': n_threads, 'mem_limit': 256, 'time_limit': 240, 'paintera_hack': paintera_hack})
+        with open(os.path.join(config_dir, 'graph_connected_components.config'), 'w') as f:
+            json.dump(conf, f)
+
         cc_key = 'assignments/connected_components_assignments'
         cc_seg_key = 'volumes/connected_components'
         t = task(tmp_folder=tmp_folder, config_dir=config_dir,
@@ -109,8 +123,8 @@ def postprocess(paintera_path, paintera_key,
         task = SizeFilterAndGraphWatershedWorkflow
         configs = task.get_config()
         conf = configs['graph_watershed_assignments']
-        conf.update({'n_threads': n_threads, 'mem_limit': 256, 'time_limit': 240})
-        with open(os.path.join(config_dir, 'graph_watershed_assignments.json'), 'w') as f:
+        conf.update({'threads_per_job': n_threads, 'mem_limit': 256, 'time_limit': 240})
+        with open(os.path.join(config_dir, 'graph_watershed_assignments.config'), 'w') as f:
             json.dump(conf, f)
 
         filtered_key = 'assignments/size_filtered'
