@@ -11,7 +11,7 @@ package:
 
 
 source:
-  path: ../
+  path: ..
 
 
 build:
@@ -23,7 +23,6 @@ build:
 requirements:
   build:
     - python {{PY_VER}}*
-    - cluster_tools
 
   run:
     - python {{PY_VER}}*
