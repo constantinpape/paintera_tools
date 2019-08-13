@@ -1,4 +1,4 @@
-from .convert import convert_to_paintera_format
+from .convert import convert_to_paintera_format, downscale
 from .curate import interactive_splitter, batch_splitter
 from .curate import postprocess
 from .serialize import serialize_from_commit, serialize_from_project

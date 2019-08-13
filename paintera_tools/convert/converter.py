@@ -2,10 +2,12 @@ import os
 import json
 import luigi
 from cluster_tools.paintera import ConversionWorkflow
+from cluster_tools.downscaling import DownscalingWorkflow
 
 from ..util import write_global_config
 
 
+# TODO support label multisets
 def convert_to_paintera_format(path, raw_key, in_key, out_key,
                                label_scale, resolution,
                                tmp_folder, target, max_jobs, max_threads,
@@ -41,4 +43,38 @@ def convert_to_paintera_format(path, raw_key, in_key, out_key,
                               assignment_path=assignment_path, assignment_key=assignment_key,
                               label_scale=label_scale, resolution=resolution)
     ret = luigi.build([task], local_scheduler=True)
+    assert ret, "Conversion to paintera format failed"
+
+
+def downscale(path, input_key, output_key,
+              scale_factors, halos,
+              tmp_folder, target, max_jobs, resolution=None,
+              library='skimage', scale_offset=0, **library_kwargs):
+    assert len(scale_factors) == len(halos)
+
+    config_folder = os.path.join(tmp_folder, 'configs')
+    write_global_config(config_folder)
+
+    task = DownscalingWorkflow
+    configs = task.get_config()
+
+    config = configs['downscaling']
+    config.update({"mem_limit": 12, "time_limit": 120, "library": library})
+    if library_kwargs:
+        config.update({"library_kwargs": library_kwargs})
+    with open(os.path.join(config_folder, "downscaling.config"), 'w') as f:
+        json.dump(config, f)
+
+    metadata = {}
+    if resolution:
+        metadata.update({'resolution': resolution})
+
+    t = DownscalingWorkflow(tmp_folder=tmp_folder, config_dir=config_folder,
+                            max_jobs=max_jobs, target=target,
+                            input_path=path, input_key=input_key,
+                            output_key_prefix=output_key,
+                            scale_factors=scale_factors, halos=halos,
+                            metadata_format='paintera', metadata_dict=metadata,
+                            scale_offset=scale_offset)
+    ret = luigi.build([t], local_scheduler=True)
     assert ret, "Conversion to paintera format failed"

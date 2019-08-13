@@ -120,6 +120,9 @@ def postprocess(paintera_path, paintera_key,
 
     # 5.) run size filter work-flow if size threshold
     if size_threshold > 0:
+        # TODO implement this as well
+        if paintera_hack:
+            raise NotImplementedError("Size filtering not implemented for paintera hack")
         task = SizeFilterAndGraphWatershedWorkflow
         configs = task.get_config()
         conf = configs['graph_watershed_assignments']

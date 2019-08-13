@@ -1,1 +1,1 @@
-from .converter import convert_to_paintera_format
+from .converter import convert_to_paintera_format, downscale
