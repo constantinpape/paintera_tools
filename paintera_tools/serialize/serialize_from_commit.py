@@ -6,6 +6,7 @@ import luigi
 import vigra
 import z5py
 from cluster_tools.write import WriteLocal, WriteSlurm
+from cluster_tools.copy_volume import CopyVolumeLocal, CopyVolumeSlurm
 
 from ..util import save_assignments, make_dense_assignments, find_uniques, write_global_config
 
@@ -60,27 +61,25 @@ def serialize_merged_segmentation(path, key, out_path, out_key, ass_path, ass_ke
         raise RuntimeError("Writing merged segmentation failed")
 
 
-def serialize_from_commit(path, key, out_path, out_key,
-                          tmp_folder, max_jobs, target, scale=0,
-                          locked_segments=None, relabel_output=False):
-    """ Serialize corrected segmentation from commited project.
-    """
-    f = z5py.File(path, 'r')
-    g = f[key]
-
-    # make sure this is a paintera group
-    seg_key = 'data'
-    assignment_in_key = 'fragment-segment-assignment'
-    assert seg_key in g
-    assert assignment_in_key in g
-
-    # prepare cluster tools tasks
-    os.makedirs(tmp_folder, exist_ok=True)
-    seg_in_key = os.path.join(key, seg_key, 's%i' % scale)
-
+def copy_segmentation(path, in_key, out_path, out_key,
+                      tmp_folder, max_jobs, target):
+    task = CopyVolumeLocal if target == 'local' else CopyVolumeSlurm
     config_folder = os.path.join(tmp_folder, 'configs')
-    block_shape = f[seg_in_key].chunks
-    write_global_config(config_folder, block_shape)
+
+    t = task(tmp_folder=tmp_folder, config_dir=config_folder, max_jobs=max_jobs,
+             input_path=path, input_key=in_key, output_path=out_path, output_key=out_key,
+             prefix='copy_serialize')
+
+    ret = luigi.build([t], local_scheduler=True)
+    assert ret, "Copying segmentation failed"
+
+
+def serialize_with_assignments(path, g, out_path, out_key,
+                               seg_in_key, tmp_folder,
+                               max_jobs, target,
+                               locked_segments, relabel_output):
+    assignment_in_key = 'fragment-segment-assignment'
+    config_folder = os.path.join(tmp_folder, 'configs')
 
     save_path = os.path.join(tmp_folder, 'assignments.n5')
     unique_key = 'uniques'
@@ -102,3 +101,36 @@ def serialize_from_commit(path, key, out_path, out_key,
                                   out_path, out_key,
                                   save_path, assignment_key,
                                   tmp_folder, max_jobs, target)
+
+
+def serialize_from_commit(path, key, out_path, out_key,
+                          tmp_folder, max_jobs, target, scale=0,
+                          locked_segments=None, relabel_output=False):
+    """ Serialize corrected segmentation from commited project.
+    """
+    f = z5py.File(path, 'r')
+    g = f[key]
+
+    os.makedirs(tmp_folder, exist_ok=True)
+    config_folder = os.path.join(tmp_folder, 'configs')
+
+    # make sure this is a paintera group
+    seg_key = 'data'
+    assignment_in_key = 'fragment-segment-assignment'
+    assert seg_key in g
+    have_assignments = assignment_in_key in g
+
+    # prepare cluster tools tasks
+    seg_in_key = os.path.join(key, seg_key, 's%i' % scale)
+    block_shape = f[seg_in_key].chunks
+    write_global_config(config_folder, block_shape)
+
+    # TODO support serializing without assignments
+    # (= just copy the segmentation)
+    if have_assignments:
+        serialize_with_assignments(path, g, out_path, out_key, seg_in_key,
+                                   tmp_folder, max_jobs, target, locked_segments,
+                                   relabel_output)
+    else:
+        copy_segmentation(path, seg_in_key, out_path, out_key,
+                          tmp_folder, max_jobs, target)
