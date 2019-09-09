@@ -7,12 +7,18 @@ from cluster_tools.downscaling import DownscalingWorkflow
 from ..util import write_global_config
 
 
-# TODO support label multisets
 def convert_to_paintera_format(path, raw_key, in_key, out_key,
                                label_scale, resolution,
                                tmp_folder, target, max_jobs, max_threads,
                                assignment_path='', assignment_key='',
-                               label_block_mapping_compression='gzip'):
+                               label_block_mapping_compression='gzip',
+                               copy_labels=False, convert_to_label_multisets=False,
+                               restrict_sets=None):
+    """
+    """
+
+    if convert_to_label_multisets:
+        assert restrict_sets is not None
 
     config_folder = os.path.join(tmp_folder, 'configs')
     write_global_config(config_folder)
@@ -38,10 +44,11 @@ def convert_to_paintera_format(path, raw_key, in_key, out_key,
     task = ConversionWorkflow(tmp_folder=tmp_folder, config_dir=config_folder,
                               max_jobs=max_jobs, target=target,
                               path=path, raw_key=raw_key,
-                              label_in_key=in_key,
-                              label_out_key=out_key,
+                              label_in_key=in_key, label_out_key=out_key,
                               assignment_path=assignment_path, assignment_key=assignment_key,
-                              label_scale=label_scale, resolution=resolution)
+                              label_scale=label_scale, resolution=resolution,
+                              use_label_multiset=convert_to_label_multisets,
+                              restrict_sets=restrict_sets, copy_labels=copy_labels)
     ret = luigi.build([task], local_scheduler=True)
     assert ret, "Conversion to paintera format failed"
 
@@ -50,6 +57,8 @@ def downscale(path, input_key, output_key,
               scale_factors, halos,
               tmp_folder, target, max_jobs, resolution=None,
               library='skimage', scale_offset=0, **library_kwargs):
+    """
+    """
     assert len(scale_factors) == len(halos)
 
     config_folder = os.path.join(tmp_folder, 'configs')
