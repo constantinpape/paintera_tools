@@ -116,7 +116,8 @@ def check_chunk(blocking, chunk_id, ds_mset1, ds_mset2, ds_seg, scale):
 def get_scale(level):
     scales = [[1, 1, 1],
               [1, 2, 2],
-              [1, 4, 4]]
+              [1, 4, 4],
+              [2, 8, 8]]
     return scales[level]
 
 
@@ -144,6 +145,7 @@ def check_multiset(level):
 
 
 if __name__ == '__main__':
-    # check_multiset(0)
-    # check_multiset(1)
-    check_multiset(2)
+    print("Checking mult-sets for chunk 0 of scales:")
+    for scale in range(4):
+        print("Check scale", scale)
+        check_multiset(scale)
