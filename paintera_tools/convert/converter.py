@@ -69,6 +69,17 @@ def convert_to_paintera_format(path, raw_key, in_key, out_key,
     with open(os.path.join(config_folder, 'label_block_mapping.config'), 'w') as f:
         json.dump(block_mapping_conf, f)
 
+    if convert_to_label_multisets:
+        create_conf = configs['create_multiset']
+        create_conf.update({'time_limit': 240, 'mem_limit': 4})
+        with open(os.path.join(config_folder, 'create_multiset.config'), 'w') as f:
+            json.dump(create_conf, f)
+
+        ds_conf = configs['downscale_multiset']
+        ds_conf.update({'time_limit': 240, 'mem_limit': 4})
+        with open(os.path.join(config_folder, 'downscale_multiset.config'), 'w') as f:
+            json.dump(ds_conf, f)
+
     task = ConversionWorkflow(tmp_folder=tmp_folder, config_dir=config_folder,
                               max_jobs=max_jobs, target=target,
                               path=path, raw_key=raw_key,
