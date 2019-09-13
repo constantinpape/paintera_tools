@@ -54,9 +54,8 @@ def check_multiset_members(mset1, mset2):
     return True
 
 
-def check_pixels(mset1, mset2, seg, scale):
+def check_pixels(mset1, mset2, seg, scale, offset):
     roi_end = mset1.shape
-    # roi_end = [10, 10, 10]
     blocking = nt.blocking([0, 0, 0], roi_end, [1, 1, 1])
     for block_id in trange(blocking.numberOfBlocks):
         block = blocking.getBlock(block_id)
@@ -65,7 +64,7 @@ def check_pixels(mset1, mset2, seg, scale):
         i2, c2 = mset2[bb]
 
         if not np.array_equal(i1, i2) or not np.array_equal(c1, c2):
-            print("Entries disagree for coords", bb)
+            print("Entries disagree for block", block_id, ":", bb)
             print("Ids")
             print("Res:", i1)
             print("Exp:", i2)
@@ -74,9 +73,10 @@ def check_pixels(mset1, mset2, seg, scale):
             print("Exp:", c2)
 
             print("From segmentation")
-            effective_bb = tuple(slice(b.start * sc, b.stop * sc) for b, sc in zip(bb, scale))
+            effective_bb = tuple(slice(b.start * sc + off, b.stop * sc + off) for b, sc, off in zip(bb, scale, offset))
             print(effective_bb)
             sub_seg = seg[effective_bb]
+            print(sub_seg)
             sids, scounts = np.unique(sub_seg, return_counts=True)
             print("Ids")
             print(sids)
@@ -107,21 +107,15 @@ def check_chunk(blocking, chunk_id, ds_mset1, ds_mset2, ds_seg, scale):
 
     ds_seg.n_threads = 8
     seg = ds_seg[:]
-    if(check_pixels(mset1, mset2, seg, scale)):
+
+    offset = tuple(beg * sc for beg, sc in zip(block.begin, scale))
+    if(check_pixels(mset1, mset2, seg, scale, offset)):
         print("Multisets agree")
     else:
         print("Multisets disagree")
 
 
-def get_scale(level):
-    scales = [[1, 1, 1],
-              [1, 2, 2],
-              [1, 4, 4],
-              [2, 8, 8]]
-    return scales[level]
-
-
-def check_multiset(level):
+def check_multiset(level, chunk_id=0):
     path = '/home/pape/Work/data/cremi/example/sampleA.n5'
     seg_key = 'volumes/segmentation/multicut'
     mset_key = 'paintera/data/s%i' % level
@@ -139,13 +133,20 @@ def check_multiset(level):
                                                           str(ds_mset1.chunks))
     shape, chunks = ds_mset.shape, ds_mset.chunks
 
+    ds_factor = ds_mset.attrs.get('downsamplingFactors', None)
+    ds_factor_exp = ds_mset1.attrs.get('downsamplingFactors', None)
+    assert ds_factor == ds_factor_exp
+    scale = [int(df) for df in ds_factor[::-1]]
+    print("Have scale", scale)
+
     blocking = nt.blocking([0, 0, 0], shape, chunks)
-    scale = get_scale(level)
-    check_chunk(blocking, 0, ds_mset, ds_mset1, ds_seg, scale)
+    check_chunk(blocking, chunk_id, ds_mset, ds_mset1, ds_seg, scale)
 
 
 if __name__ == '__main__':
-    print("Checking mult-sets for chunk 0 of scales:")
-    for scale in range(4):
-        print("Check scale", scale)
-        check_multiset(scale)
+    chunk_id = 0
+    check_multiset(4, chunk_id)
+    # print("Checking mult-sets for chunk 0 of scales:")
+    # for scale in range(5):
+    #     print("Check scale", scale)
+    #     check_multiset(scale)
