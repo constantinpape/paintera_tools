@@ -90,6 +90,12 @@ def check_pixels(mset1, mset2, seg, scale, offset):
 
 
 def check_chunk(blocking, chunk_id, ds_mset1, ds_mset2, ds_seg, scale):
+    if isinstance(chunk_id, tuple):
+        bpd = blocking.blocksPerAxis
+        strides = [bpd[2] * bpd[1], bpd[2], 1]
+        chunk_id = sum([stride * cid for stride, cid in zip(strides, chunk_id)])
+        print(chunk_id)
+
     block = blocking.getBlock(chunk_id)
     chunk = tuple(beg // ch for beg, ch in zip(block.begin, blocking.blockShape))
     mset1 = ds_mset1.read_chunk(chunk)
@@ -144,8 +150,10 @@ def check_multiset(level, chunk_id=0):
 
 
 if __name__ == '__main__':
-    chunk_id = 0
-    check_multiset(4, chunk_id)
+    level = 1
+    # chunk_id = 0
+    chunk_id = (0, 2, 0)
+    check_multiset(level, chunk_id)
     # print("Checking mult-sets for chunk 0 of scales:")
     # for scale in range(5):
     #     print("Check scale", scale)

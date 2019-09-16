@@ -14,7 +14,8 @@ from ..util import save_assignments, make_dense_assignments, find_uniques, write
 # TODO wrap this in a luigi.Task
 def serialize_assignments(g, ass_key,
                           save_path, unique_key, save_key,
-                          locked_segments=None, relabel_output=False):
+                          locked_segments=None, relabel_output=False,
+                          map_to_background=None):
 
     # load the unique ids
     f = z5py.File(save_path)
@@ -36,6 +37,10 @@ def serialize_assignments(g, ass_key,
         vigra.analysis.relabelConsecutive(values, start_label=1, keep_zeros=True,
                                           out=values)
         dense_assignments[:, 1] = values
+
+    if map_to_background:
+        bg_mask = np.isin(dense_assignments[:, 1], map_to_background)
+        dense_assignments[:, 1][bg_mask] = 0
 
     save_assignments(dense_assignments, save_path, save_key)
 
@@ -77,7 +82,8 @@ def copy_segmentation(path, in_key, out_path, out_key,
 def serialize_with_assignments(path, g, out_path, out_key,
                                seg_in_key, tmp_folder,
                                max_jobs, target,
-                               locked_segments, relabel_output):
+                               locked_segments, relabel_output,
+                               map_to_background):
     assignment_in_key = 'fragment-segment-assignment'
     config_folder = os.path.join(tmp_folder, 'configs')
 
@@ -93,7 +99,8 @@ def serialize_with_assignments(path, g, out_path, out_key,
     print("Serializing assignments ...")
     serialize_assignments(g, assignment_in_key,
                           save_path, unique_key, assignment_key,
-                          locked_segments, relabel_output)
+                          locked_segments, relabel_output,
+                          map_to_background)
 
     # 3.) write the new segmentation
     print("Serializing new segmentation ...")
@@ -105,7 +112,8 @@ def serialize_with_assignments(path, g, out_path, out_key,
 
 def serialize_from_commit(path, key, out_path, out_key,
                           tmp_folder, max_jobs, target, scale=0,
-                          locked_segments=None, relabel_output=False):
+                          locked_segments=None, relabel_output=False,
+                          map_to_background=None):
     """ Serialize corrected segmentation from commited project.
     """
     f = z5py.File(path, 'r')
@@ -125,12 +133,10 @@ def serialize_from_commit(path, key, out_path, out_key,
     block_shape = f[seg_in_key].chunks
     write_global_config(config_folder, block_shape)
 
-    # TODO support serializing without assignments
-    # (= just copy the segmentation)
     if have_assignments:
         serialize_with_assignments(path, g, out_path, out_key, seg_in_key,
                                    tmp_folder, max_jobs, target, locked_segments,
-                                   relabel_output)
+                                   relabel_output, map_to_background=map_to_background)
     else:
         copy_segmentation(path, seg_in_key, out_path, out_key,
                           tmp_folder, max_jobs, target)
