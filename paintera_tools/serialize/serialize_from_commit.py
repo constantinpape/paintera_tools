@@ -5,6 +5,7 @@ import numpy as np
 import luigi
 import vigra
 import z5py
+import nifty.tools as nt
 from cluster_tools.write import WriteLocal, WriteSlurm
 from cluster_tools.copy_volume import CopyVolumeLocal, CopyVolumeSlurm
 
@@ -140,3 +141,37 @@ def serialize_from_commit(path, key, out_path, out_key,
     else:
         copy_segmentation(path, seg_in_key, out_path, out_key,
                           tmp_folder, max_jobs, target)
+
+
+def extract_from_commit(path, key, scale=0, relabel_output=False, n_threads=8):
+    """ Extract corrected segmentation from commited project
+    and return it as array.
+    """
+    f = z5py.File(path, 'r')
+    g = f[key]
+
+    # make sure this is a paintera group
+    seg_key = 'data'
+    assignment_in_key = 'fragment-segment-assignment'
+    assert seg_key in g
+    have_assignments = assignment_in_key in g
+    seg_in_key = os.path.join(seg_key, 's%i' % scale)
+
+    # TODO support label multiset here !
+    ds = g[seg_in_key]
+    ds.n_threads = n_threads
+    seg = ds[:]
+
+    if have_assignments:
+        fragment_ids = np.unique(seg)
+        assignments = g[assignment_in_key][:].T
+        assignments = make_dense_assignments(fragment_ids, assignments)
+        if relabel_output:
+            assignments[:, 1] = vigra.analysis.relabelConsecutive(assignments[:, 1], start_label=1, keep_zeros=True)
+        assignments = dict(zip(assignments[:, 0], assignments[:, 1]))
+        seg = nt.takeDict(assignments, seg)
+
+    elif relabel_output:
+        seg = vigra.analysis.relabelConsecutive(seg, start_label=1, keep_zeros=True)
+
+    return seg

@@ -1,2 +1,2 @@
-from .serialize_from_commit import serialize_from_commit
+from .serialize_from_commit import serialize_from_commit, extract_from_commit
 from .serialize_from_project import serialize_from_project
