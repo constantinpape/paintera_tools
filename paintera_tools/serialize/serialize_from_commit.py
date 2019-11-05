@@ -4,46 +4,80 @@ import numpy as np
 
 import luigi
 import vigra
-import z5py
 import nifty.tools as nt
+from elf.io import open_file
 from cluster_tools.write import WriteLocal, WriteSlurm
 from cluster_tools.copy_volume import CopyVolumeLocal, CopyVolumeSlurm
 
 from ..util import save_assignments, make_dense_assignments, find_uniques, write_global_config
 
 
-# TODO wrap this in a luigi.Task
-def serialize_assignments(g, ass_key,
-                          save_path, unique_key, save_key,
+class SerializeAssignments(luigi.Task):
+    tmp_folder = luigi.Parameter()
+    assignment_path = luigi.Parameter()
+    assignment_key = luigi.Parameter()
+    unique_path = luigi.Parameter()
+    unique_key = luigi.Parameter()
+    out_path = luigi.Parameter()
+    out_key = luigi.Parameter()
+    locked_segments = luigi.ListParameter(default=None)
+    relabel_output = luigi.BoolParameter(default=False)
+    map_to_background = luigi.ListParameter(default=None)
+
+    def run(self):
+        # load the unique fragment ids
+        with open_file(self.unique_path, 'r') as f:
+            ds = f[self.unique_key]
+            fragment_ids = ds[:]
+
+        # load the assignments and make them dense
+        with open_file(self.assignment_path, 'r') as f:
+            ds = f[self.assignment_key]
+            assignments = ds[:].T
+        dense_assignments = make_dense_assignments(fragment_ids, assignments)
+
+        # if locked segments are given,
+        # only keep assignments corresponding to locked segments
+        if self.locked_segments is not None:
+            locked_mask = np.in1d(dense_assignments[:, 1], self.locked_segments)
+            dense_assignments[:, 1][np.logical_not(locked_mask)] = 0
+
+        # relabel the assignments consecutively if specified
+        if self.relabel_output:
+            values = dense_assignments[:, 1]
+            vigra.analysis.relabelConsecutive(values, start_label=1, keep_zeros=True,
+                                              out=values)
+            dense_assignments[:, 1] = values
+
+        if self.map_to_background is not None:
+            bg_mask = np.isin(dense_assignments[:, 1], self.map_to_background)
+            dense_assignments[:, 1][bg_mask] = 0
+
+        save_assignments(dense_assignments, self.out_path, self.out_key)
+        log_path = self.output().path
+        with open(log_path, 'w') as f:
+            f.write("serialized paintera assignments")
+
+    def output(self):
+        log_path = os.path.join(self.tmp_folder, 'serialize_assignments.log')
+        return luigi.LocalTarget(log_path)
+
+
+def serialize_assignments(tmp_folder,
+                          assignment_path, assignment_key,
+                          unique_path, unique_key,
+                          out_path, out_key,
                           locked_segments=None, relabel_output=False,
                           map_to_background=None):
-
-    # load the unique ids
-    f = z5py.File(save_path)
-    fragment_ids = f[unique_key][:]
-
-    # load the assignments
-    assignments = g[ass_key][:].T
-    dense_assignments = make_dense_assignments(fragment_ids, assignments)
-
-    # only keep assignments corresponding to locked segments
-    # if locked segments are given
-    if locked_segments is not None:
-        locked_mask = np.in1d(dense_assignments[:, 1], locked_segments)
-        dense_assignments[:, 1][np.logical_not(locked_mask)] = 0
-
-    # relabel the assignments consecutively
-    if relabel_output:
-        values = dense_assignments[:, 1]
-        vigra.analysis.relabelConsecutive(values, start_label=1, keep_zeros=True,
-                                          out=values)
-        dense_assignments[:, 1] = values
-
-    if map_to_background:
-        bg_mask = np.isin(dense_assignments[:, 1], map_to_background)
-        dense_assignments[:, 1][bg_mask] = 0
-
-    save_assignments(dense_assignments, save_path, save_key)
+    task = SerializeAssignments
+    t = task(tmp_folder=tmp_folder,
+             assignment_path=assignment_path, assignment_key=assignment_key,
+             unique_path=unique_path, unique_key=unique_key,
+             out_path=out_path, out_key=out_key,
+             locked_segments=locked_segments, relabel_output=relabel_output,
+             map_to_background=map_to_background)
+    ret = luigi.build([t], local_scheduler=True)
+    assert ret, "Serializing the assignments failed"
 
 
 def serialize_merged_segmentation(path, key, out_path, out_key, ass_path, ass_key,
@@ -52,8 +86,9 @@ def serialize_merged_segmentation(path, key, out_path, out_key, ass_path, ass_ke
     config_folder = os.path.join(tmp_folder, 'configs')
     config = task.default_task_config()
 
-    block_shape = z5py.File(path, 'r')[key].chunks
-    config.update({'chunks': block_shape, 'allow_empty_assignments': True})
+    block_shape = open_file(path, 'r')[key].chunks
+    config.update({'chunks': block_shape, 'allow_empty_assignments': True,
+                   'time_limit': 180})
     with open(os.path.join(config_folder, 'write.config'), 'w') as f:
         json.dump(config, f)
 
@@ -80,12 +115,12 @@ def copy_segmentation(path, in_key, out_path, out_key,
     assert ret, "Copying segmentation failed"
 
 
-def serialize_with_assignments(path, g, out_path, out_key,
+def serialize_with_assignments(path, paintera_key, out_path, out_key,
                                seg_in_key, tmp_folder,
                                max_jobs, target,
                                locked_segments, relabel_output,
                                map_to_background):
-    assignment_in_key = 'fragment-segment-assignment'
+    assignment_in_key = os.path.join(paintera_key, 'fragment-segment-assignment')
     config_folder = os.path.join(tmp_folder, 'configs')
 
     save_path = os.path.join(tmp_folder, 'assignments.n5')
@@ -98,8 +133,10 @@ def serialize_with_assignments(path, g, out_path, out_key,
 
     # 2.) make and serialize new assignments
     print("Serializing assignments ...")
-    serialize_assignments(g, assignment_in_key,
-                          save_path, unique_key, assignment_key,
+    serialize_assignments(tmp_folder,
+                          path, assignment_in_key,
+                          save_path, unique_key,
+                          save_path, assignment_key,
                           locked_segments, relabel_output,
                           map_to_background)
 
@@ -117,7 +154,7 @@ def serialize_from_commit(path, key, out_path, out_key,
                           map_to_background=None):
     """ Serialize corrected segmentation from commited project.
     """
-    f = z5py.File(path, 'r')
+    f = open_file(path, 'r')
     g = f[key]
 
     os.makedirs(tmp_folder, exist_ok=True)
@@ -135,7 +172,7 @@ def serialize_from_commit(path, key, out_path, out_key,
     write_global_config(config_folder, block_shape)
 
     if have_assignments:
-        serialize_with_assignments(path, g, out_path, out_key, seg_in_key,
+        serialize_with_assignments(path, key, out_path, out_key, seg_in_key,
                                    tmp_folder, max_jobs, target, locked_segments,
                                    relabel_output, map_to_background=map_to_background)
     else:
@@ -147,7 +184,7 @@ def extract_from_commit(path, key, scale=0, relabel_output=False, n_threads=8):
     """ Extract corrected segmentation from commited project
     and return it as array.
     """
-    f = z5py.File(path, 'r')
+    f = open_file(path, 'r')
     g = f[key]
 
     # make sure this is a paintera group

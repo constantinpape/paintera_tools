@@ -107,6 +107,11 @@ def compute_graph_and_weights(aff_path, aff_key,
     with open(os.path.join(config_folder, 'initial_sub_graphs.config'), 'w') as f:
         json.dump(conf, f)
 
+    conf = configs['probs_to_costs']
+    conf.update({'weight_edges': True, 'mem_limit': 32, 'threads_per_job': 4})
+    with open(os.path.join(config_folder, 'probs_to_costs.config'), 'w') as f:
+        json.dump(conf, f)
+
     conf_names = ['merge_sub_graphs', 'map_edge_ids', 'merge_edge_features']
     # TODO make this configurable
     n_threads = 8

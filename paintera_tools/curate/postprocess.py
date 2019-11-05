@@ -26,25 +26,6 @@ def write_postprocessed(in_path, in_key,
     assert ret, "Write failed"
 
 
-def make_graph_assignments(f, node_ids, assignments, out_key, n_threads):
-    # make node labels from assignments
-    assignment_dict = dict(zip(assignments[:, 0],
-                               assignments[:, 1]))
-    # we need dense assignments for this to work
-    max_id = int(node_ids.max())
-    node_labels = np.array([assignment_dict.get(node_id, node_id)
-                            for node_id in range(max_id + 1)],
-                           dtype='uint64')
-
-    # save temporary node labels
-    new_chunks = (min(100000, len(node_labels)),)
-    ds = f.require_dataset(out_key, shape=node_labels.shape,
-                           chunks=new_chunks, compression='gzip',
-                           dtype='uint64')
-    ds.n_threads = n_threads
-    ds[:] = node_labels
-
-
 def update_assignments_inplace(paintera_path, paintera_key,
                                input_path, input_key,
                                n_threads, backup_assignments):
@@ -79,7 +60,8 @@ def postprocess(paintera_path, paintera_key,
                 tmp_folder, target, max_jobs, n_threads,
                 size_threshold=None, target_number=None,
                 label=False, backup_assignments=True,
-                output_path=None, output_key=None):
+                output_path=None, output_key=None,
+                keep_paintera_ids=False):
 
     if output_path is None:
         assert output_key is None
@@ -94,6 +76,10 @@ def postprocess(paintera_path, paintera_key,
     if not label and not run_size_filter:
         print("Neither size filtering nor label selected; doing nothing")
         return
+
+    if keep_paintera_ids and label:
+        raise RuntimeError("Cannot keep paintera ids if we apply connected components")
+    relabel = not keep_paintera_ids
 
     assignment_key = 'fragment-segment-assignment'
     data_key = 'data/s0'
@@ -111,7 +97,7 @@ def postprocess(paintera_path, paintera_key,
     serialize_from_commit(paintera_path, paintera_key,
                           exp_path, current_seg_key,
                           tmp_serialize, max_jobs, target,
-                          relabel_output=True)
+                          relabel_output=relabel)
 
     # 2.) compute graph and weigthts
     compute_graph_and_weights(boundary_path, boundary_key,
@@ -147,6 +133,7 @@ def postprocess(paintera_path, paintera_key,
                                chunks=chunks1d, compression='gzip', dtype='uint64')
     ds_out[:] = new_assignments
 
+    # FIXME something goes wrong ig we use both connected components and size filtering
     # 4.) run connected components if selected
     if label:
         task = ConnectedComponentsWorkflow
@@ -188,8 +175,6 @@ def postprocess(paintera_path, paintera_key,
         with open(os.path.join(config_dir, 'graph_watershed_assignments.config'), 'w') as f:
             json.dump(conf, f)
 
-        # we only bother to relabel if we don't run inplace
-        relabel_thresholded = not inplace
         filtered_key = 'assignments/size_filtered'
         t = task(tmp_folder=tmp_folder, config_dir=config_dir,
                  max_jobs=max_jobs, target=target,
@@ -198,7 +183,7 @@ def postprocess(paintera_path, paintera_key,
                  path=exp_path, segmentation_key=current_seg_key,
                  assignment_key=current_ass_key,
                  size_threshold=size_threshold, target_number=target_number,
-                 relabel=relabel_thresholded, output_path=exp_path,
+                 relabel=relabel, output_path=exp_path,
                  assignment_out_key=filtered_key)
         ret = luigi.build([t], local_scheduler=True)
         assert ret, "Size filter failed"
