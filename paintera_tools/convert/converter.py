@@ -13,7 +13,7 @@ def convert_to_paintera_format(path, raw_key, in_key, out_key,
                                assignment_path='', assignment_key='',
                                label_block_mapping_compression='gzip',
                                copy_labels=False, convert_to_label_multisets=False,
-                               restrict_sets=None):
+                               restrict_sets=None, restrict_scales=None):
     """ Convert n5 label dataset to n5 paintera format.
 
     Produces output group with the subgroups:
@@ -44,6 +44,7 @@ def convert_to_paintera_format(path, raw_key, in_key, out_key,
         convert_to_label_multisets [bool] - convert to label multiset instead of label arrays. (default: False)
         restrict_sets [listlike] - label multiset restrictions for all scales.
             Must be given if convert_to_label_multisets is set. (default: None)
+        restrict_scales [int] - restrict the number of scales for downsampling. (default: None)
     """
     if convert_to_label_multisets:
         assert restrict_sets is not None
@@ -76,7 +77,7 @@ def convert_to_paintera_format(path, raw_key, in_key, out_key,
             json.dump(create_conf, f)
 
         ds_conf = configs['downscale_multiset']
-        ds_conf.update({'time_limit': 240, 'mem_limit': 4})
+        ds_conf.update({'time_limit': 360, 'mem_limit': 8})
         with open(os.path.join(config_folder, 'downscale_multiset.config'), 'w') as f:
             json.dump(ds_conf, f)
 

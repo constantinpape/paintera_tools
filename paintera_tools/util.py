@@ -118,7 +118,7 @@ def compute_graph_and_weights(aff_path, aff_key,
     max_ram = 128
     for name in conf_names:
         conf = configs[name]
-        conf.update({'threads_per_job': n_threads, 'mem_limit': max_ram, 'time_limit': 120,
+        conf.update({'threads_per_job': n_threads, 'mem_limit': max_ram, 'time_limit': 240,
                      'qos': qos})
         with open(os.path.join(config_folder, '%s.config' % name), 'w') as f:
             json.dump(conf, f)

@@ -33,3 +33,15 @@ def parse_merges(attributes):
         frag_ids2.append(act['intoFragmentId'])
         seg_ids.append(act['segmentId'])
     return frag_ids1, frag_ids2, seg_ids
+
+
+def parse_locked_segments(attributes, name):
+    sources = attributes['paintera']['sourceInfo']['sources']
+    locked_segments = None
+    for src in sources:
+        state = src['state']
+        src_name = state['name']
+        if src_name != name:
+            continue
+        locked_segments = state['lockedSegments']
+    return locked_segments
