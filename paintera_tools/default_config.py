@@ -1,5 +1,6 @@
+import sys
 DEFAULT_GROUP = 'kreshuk'
-DEFAULT_SHEBANG = '#! /g/kreshuk/pape/Work/software/conda/miniconda3/envs/cluster_env37/bin/python'
+DEFAULT_SHEBANG = sys.executable
 DEFAULT_BLOCK_SHAPE = [50, 512, 512]
 
 
