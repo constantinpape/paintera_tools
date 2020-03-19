@@ -84,8 +84,7 @@ def write_global_config(config_folder, block_shape=None):
 def compute_graph_and_weights(aff_path, aff_key,
                               seg_path, seg_key, out_path,
                               tmp_folder, target, max_jobs,
-                              offsets=[[-1, 0, 0], [0, -1, 0], [0, 0, -1]],
-                              with_costs=False):
+                              offsets=None, with_costs=False):
     config_folder = os.path.join(tmp_folder, 'configs')
     # chunks = z5py.File(seg_path, 'r')[seg_key].chunks
     chunks = None
@@ -95,6 +94,11 @@ def compute_graph_and_weights(aff_path, aff_key,
     configs = ProblemWorkflow.get_config()
     conf = configs['block_edge_features']
     conf.update({'mem_limit': 6, 'qos': qos})
+
+    default_offsets = [[-1, 0, 0], [0, -1, 0], [0, 0, -1]]
+    aff_ndim = z5py.File(aff_path)[aff_key].ndim
+    if offsets is None and aff_ndim == 4:
+        offsets = default_offsets
     if offsets is not None:
         conf.update({'offsets': offsets})
     with open(os.path.join(config_folder, 'block_edge_features.config'), 'w') as f:
