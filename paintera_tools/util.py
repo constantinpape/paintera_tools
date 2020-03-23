@@ -73,10 +73,12 @@ def write_global_config(config_folder, block_shape=None):
     os.makedirs(config_folder, exist_ok=True)
     global_config = UniqueWorkflow.get_config()['global']
 
+    roi_begin, roi_end = default_config.get_default_roi()
     block_shape = default_config.get_default_block_shape() if block_shape is None else block_shape
     global_config.update({'shebang': default_config.get_default_shebang(),
                           'group': default_config.get_default_group(),
-                          'block_shape': block_shape})
+                          'block_shape': block_shape, 'qos': default_config.get_default_qos(),
+                          'roi_begin': roi_begin, 'roi_end': roi_end})
     with open(os.path.join(config_folder, 'global.config'), 'w') as f:
         json.dump(global_config, f)
 

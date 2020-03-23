@@ -5,6 +5,8 @@ from .serialize import serialize_from_commit, serialize_from_project, extract_fr
 
 from .default_config import get_default_group, set_default_group
 from .default_config import get_default_shebang, set_default_shebang
+from .default_config import get_default_qos, set_default_qos
 from .default_config import get_default_block_shape, set_default_block_shape
+from .default_config import get_default_roi, set_default_roi
 
 from .version import __version__

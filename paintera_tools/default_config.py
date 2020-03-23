@@ -2,6 +2,9 @@ import sys
 DEFAULT_GROUP = 'kreshuk'
 DEFAULT_SHEBANG = sys.executable
 DEFAULT_BLOCK_SHAPE = [50, 512, 512]
+DEFAULT_QOS = 'normal'
+DEFAULT_ROI_BEGIN = None
+DEFAULT_ROI_END = None
 
 
 #
@@ -28,6 +31,33 @@ def set_default_shebang(shebang):
 
 def get_default_shebang():
     return DEFAULT_SHEBANG
+
+
+#
+# get default roi parameter
+#
+
+def get_default_roi():
+    return DEFAULT_ROI_BEGIN, DEFAULT_ROI_END
+
+
+def set_default_roi(roi_begin, roi_end):
+    global DEFAULT_ROI_BEGIN, DEFAULT_ROI_END
+    DEFAULT_ROI_BEGIN = roi_begin
+    DEFAULT_ROI_END = roi_end
+
+
+#
+# default qos parameter
+#
+
+def set_default_qos(qos):
+    global DEFAULT_QOS
+    DEFAULT_QOS = qos
+
+
+def get_default_qos():
+    return DEFAULT_QOS
 
 
 #
