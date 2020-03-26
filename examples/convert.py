@@ -6,7 +6,7 @@ def convert_cremi(input_path, with_assignments, convert_to_label_multisets):
     """ Convert segmentation to paintera format.
 
     You can donwload the example data from
-    https://drive.google.com/open?id=15hZmM4cu_H_ruhlgXilNWgDZWMpuo9XK
+    https://drive.google.com/file/d/1E_Wpw9u8E4foYKk7wvx5RPSWvg_NCN7U/view?usp=sharing
 
     Arguments:
         input_path [str]: path to n5 file with raw data and segmentation
