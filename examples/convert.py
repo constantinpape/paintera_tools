@@ -1,5 +1,5 @@
 from paintera_tools import convert_to_paintera_format
-from paintera_tools import set_default_shebang, set_default_block_shape
+from paintera_tools import set_default_block_shape
 
 
 def convert_cremi(input_path, with_assignments, convert_to_label_multisets):
@@ -34,10 +34,6 @@ def convert_cremi(input_path, with_assignments, convert_to_label_multisets):
 
     # output key: we store the new paintera dataset here
     out_key = 'paintera'
-
-    # shebang to environment with all necessary dependencies
-    shebang = '#! /g/kreshuk/pape/Work/software/conda/miniconda3/envs/cluster_env37/bin/python'
-    set_default_shebang(shebang)
     set_default_block_shape([32, 256, 256])
 
     if convert_to_label_multisets:
