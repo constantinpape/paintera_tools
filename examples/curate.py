@@ -1,12 +1,8 @@
 import json
 from paintera_tools import interactive_splitter, batch_splitter, postprocess
-from paintera_tools import set_default_shebang
 
 
 def interactive_splitting():
-    shebang = '#! /g/kreshuk/pape/Work/software/conda/miniconda3/envs/cluster_env37/bin/python'
-    set_default_shebang(shebang)
-
     path = '/g/kreshuk/data/cremi/example/sampleA.n5'
     key = 'paintera'
     aff_key = 'volumes/affinities'
@@ -19,9 +15,6 @@ def interactive_splitting():
 
 
 def batch_splitting():
-    shebang = '#! /g/kreshuk/pape/Work/software/conda/miniconda3/envs/cluster_env37/bin/python'
-    set_default_shebang(shebang)
-
     path = '/g/kreshuk/data/cremi/example/sampleA.n5'
     key = 'paintera'
     aff_key = 'volumes/affinities'
@@ -42,9 +35,6 @@ def batch_splitting():
 
 
 def run_postprocessing():
-    shebang = '#! /g/kreshuk/pape/Work/software/conda/miniconda3/envs/cluster_env37/bin/python'
-    set_default_shebang(shebang)
-
     path = '/g/kreshuk/data/cremi/example/sampleA.n5'
     key = 'paintera'
     aff_key = 'volumes/affinities'

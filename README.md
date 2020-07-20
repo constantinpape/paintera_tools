@@ -22,4 +22,4 @@ and its dependencies.
 
 ## Usage
 
-For usage examples see `examples/`. You can obtain the example [cremi](https://cremi.org/) data from [here](https://drive.google.com/open?id=15hZmM4cu_H_ruhlgXilNWgDZWMpuo9XK).
+For usage examples see `examples/`. You can obtain the example [cremi](https://cremi.org/) data from [here](https://drive.google.com/file/d/1E_Wpw9u8E4foYKk7wvx5RPSWvg_NCN7U/view?usp=sharing).

@@ -1,12 +1,12 @@
 from paintera_tools import convert_to_paintera_format
-from paintera_tools import set_default_shebang, set_default_block_shape
+from paintera_tools import set_default_block_shape
 
 
 def convert_cremi(input_path, with_assignments, convert_to_label_multisets):
     """ Convert segmentation to paintera format.
 
     You can donwload the example data from
-    https://drive.google.com/open?id=15hZmM4cu_H_ruhlgXilNWgDZWMpuo9XK
+    https://drive.google.com/file/d/1E_Wpw9u8E4foYKk7wvx5RPSWvg_NCN7U/view?usp=sharing
 
     Arguments:
         input_path [str]: path to n5 file with raw data and segmentation
@@ -34,10 +34,6 @@ def convert_cremi(input_path, with_assignments, convert_to_label_multisets):
 
     # output key: we store the new paintera dataset here
     out_key = 'paintera'
-
-    # shebang to environment with all necessary dependencies
-    shebang = '#! /g/kreshuk/pape/Work/software/conda/miniconda3/envs/cluster_env37/bin/python'
-    set_default_shebang(shebang)
     set_default_block_shape([32, 256, 256])
 
     if convert_to_label_multisets:
